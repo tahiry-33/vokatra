@@ -985,11 +985,11 @@ function renderCartSheet(){
       <div class="cart-item-right">
         <div class="cart-item-total">${fmt(p.price*q)}</div>
         <div class="qty-ctrl" style="margin-top:4px">
-          <button class="qty-btn-c" onclick="updateCart(${id},-1)">−</button>
+          <button class="qty-btn-c" onclick="updateCart('${id}',-1)">−</button>
           <span class="qty-num">${q}</span>
-          <button class="qty-btn-c" onclick="updateCart(${id},1)" ${p.stock<=q?'disabled':''}>+</button>
+          <button class="qty-btn-c" onclick="updateCart('${id}',1)" ${p.stock<=q?'disabled':''}>+</button>
         </div>
-        <button class="rm-btn" onclick="removeCart(${id})">Supprimer</button>
+        <button class="rm-btn" onclick="removeCart('${id}')">Supprimer</button>
       </div>
     </div>`;
   }).join('');
@@ -1016,11 +1016,11 @@ function renderProducts(){
           </div>
           ${q>0?`
             <div class="qty-ctrl">
-              <button class="qty-btn-c" onclick="updateCart(${p.id},-1)">−</button>
+              <button class="qty-btn-c" onclick="updateCart('${p.id}',-1)">−</button>
               <span class="qty-num">${q}</span>
-              <button class="qty-btn-c" onclick="updateCart(${p.id},1)" ${p.stock<=q?'disabled':''}>+</button>
+              <button class="qty-btn-c" onclick="updateCart('${p.id}',1)" ${p.stock<=q?'disabled':''}>+</button>
             </div>
-          `:`<button class="add-btn-mobile" onclick="updateCart(${p.id},1)" ${p.stock===0?'disabled':''}>${p.stock===0?'Épuisé':'+ Ajouter'}</button>`}
+          `:`<button class="add-btn-mobile" onclick="updateCart('${p.id}',1)" ${p.stock===0?'disabled':''}>${p.stock===0?'Épuisé':'+ Ajouter'}</button>`}
         </div>
       </div>
     </div>`;
