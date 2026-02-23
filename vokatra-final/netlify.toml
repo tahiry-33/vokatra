@@ -1,22 +1,14 @@
 [build]
-  publish   = "public"
+  publish   = "."
   functions = "netlify/functions"
 
-[dev]
-  functions = "netlify/functions"
-  port      = 8888
-
-# Rediriger toutes les routes vers index.html (SPA)
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
   status = 200
 
-# Sécurité headers
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options        = "DENY"
-    X-XSS-Protection       = "1; mode=block"
     X-Content-Type-Options = "nosniff"
-    Referrer-Policy        = "strict-origin-when-cross-origin"
