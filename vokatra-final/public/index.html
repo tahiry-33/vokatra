@@ -640,12 +640,12 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
   </div>
 
   <div class="catalog-wrap">
-    <div class="filter-chips">
-      <div class="chip active">Tous</div>
-      <div class="chip">Plats chauds</div>
-      <div class="chip">Boulangerie</div>
-      <div class="chip">Desserts</div>
-      <div class="chip">Artisanat</div>
+    <div class="filter-chips" id="cat-chips">
+      <div class="chip active" onclick="filterCat('all')">Tous</div>
+      <div class="chip" onclick="filterCat('plats_chauds')">Plats chauds</div>
+      <div class="chip" onclick="filterCat('boulangerie')">Boulangerie</div>
+      <div class="chip" onclick="filterCat('desserts')">Desserts</div>
+      <div class="chip" onclick="filterCat('artisanat')">Artisanat</div>
     </div>
     <div class="product-list" id="product-list"></div>
   </div>
@@ -943,7 +943,7 @@ let cart = {};
 let donAmt = 10;
 
 /* ===== UTILS ===== */
-function fmt(v){return v.toFixed(2).replace('.',',')+'\u00a0€';}
+function fmt(v){return (isNaN(v)?0:v).toFixed(2).replace('.',',')+'\u00a0€';}
 function getTotal(){return Object.entries(cart).reduce((s,[id,q])=>{const p=PRODUCTS.find(x=>x.id==id);return s+(p?p.price*q:0);},0);}
 
 /* ===== CART ===== */
@@ -997,9 +997,21 @@ function renderCartSheet(){
 }
 
 /* ===== PRODUCTS ===== */
+let activeCat = 'all';
+function filterCat(cat){
+  activeCat = cat;
+  document.querySelectorAll('#cat-chips .chip').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  renderProducts();
+}
 function renderProducts(){
   const list=document.getElementById('product-list');
-  list.innerHTML=PRODUCTS.filter(p=>p.active).map(p=>{
+  const filtered = PRODUCTS.filter(p => p.active && (activeCat === 'all' || p.category === activeCat));
+  if(!filtered.length){
+    list.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--navy-light);font-size:0.95rem">Aucun produit dans cette catégorie.</div>';
+    return;
+  }
+  list.innerHTML=filtered.map(p=>{
     const q=cart[p.id]||0;
     const sc=p.stock===0?'out':p.stock<=5?'low':'';
     const sl=p.stock===0?'Épuisé':p.stock<=5?`Plus que ${p.stock}`:p.stock+' dispo';
@@ -1272,12 +1284,12 @@ async function initApp(){
     PRODUCTS = prods.map(p => ({
       id: p.id,
       name: p.name,
-      desc: p.description,
-      price: p.unit_price_cents / 100,
-      stock: p.stock_qty,
+      desc: p.description || '',
+      price: (p.unit_price_cents ?? p.price_cents ?? 0) / 100,
+      stock: p.stock_qty ?? 0,
       active: p.active,
       emoji: p.emoji || '🍽️',
-      category: p.category
+      category: p.category || 'general'
     }));
     renderProducts();
 
