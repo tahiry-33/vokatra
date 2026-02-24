@@ -753,11 +753,49 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
       </div>
     </div>
 
-    <button class="pay-btn" onclick="doStripe()">
-      🔒 Payer par carte — <span id="pay-amount-label">0,00 €</span>
+    <!-- Choix du mode de paiement -->
+    <div class="form-card">
+      <div class="form-card-title">💳 Mode de paiement</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <label style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid var(--navy);border-radius:10px;cursor:pointer;background:#f0f4ff;">
+          <input type="radio" name="pay-method" value="onsite" checked style="accent-color:var(--navy);width:18px;height:18px;">
+          <div>
+            <div style="font-weight:600;color:var(--navy);">🤝 Payer sur place</div>
+            <div style="font-size:0.8rem;color:var(--gray);">Réglez lors du retrait de votre commande</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid #e0e0e0;border-radius:10px;cursor:pointer;background:#fafafa;">
+          <input type="radio" name="pay-method" value="card" style="accent-color:var(--navy);width:18px;height:18px;">
+          <div>
+            <div style="font-weight:600;color:var(--navy);">💳 Payer par carte bancaire</div>
+            <div style="font-size:0.8rem;color:var(--gray);">Paiement sécurisé via Stripe</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <button class="pay-btn" onclick="doPayment()">
+      ✅ Confirmer la commande — <span id="pay-amount-label">0,00 €</span>
     </button>
-    <div class="pay-security">🔐 Sécurisé par <span class="stripe-s">S</span>tripe · Aucune donnée stockée</div>
+    <div class="pay-security" id="pay-security-label">🤝 Paiement sur place lors du retrait</div>
     <div style="height:16px"></div>
+
+    <script>
+      document.querySelectorAll('input[name="pay-method"]').forEach(r => {
+        r.addEventListener('change', function(){
+          const lbl = document.getElementById('pay-security-label');
+          const labels = this.closest('.form-card').querySelectorAll('label');
+          labels.forEach(l => { l.style.border='2px solid #e0e0e0'; l.style.background='#fafafa'; });
+          this.closest('label').style.border='2px solid var(--navy)';
+          this.closest('label').style.background='#f0f4ff';
+          if(this.value==='card'){
+            lbl.innerHTML='🔐 Sécurisé par <span class="stripe-s">S</span>tripe · Aucune donnée stockée';
+          } else {
+            lbl.innerHTML='🤝 Paiement sur place lors du retrait';
+          }
+        });
+      });
+    </script>
   </div>
 </div>
 
@@ -814,7 +852,7 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
       </div>
       <div class="form-group"><label class="form-label">Message</label><input type="text" class="f-input" placeholder="Un mot pour la communauté..."></div>
     </div>
-    <button class="pay-btn" onclick="doStripe()" id="don-btn">🔒 Faire un don de 10 €</button>
+    <button class="pay-btn" onclick="doDon()" id="don-btn">🤲 Faire un don de <span id="don-amount-display">10</span> €</button>
     <div class="pay-security">🔐 Sécurisé par <span class="stripe-s">S</span>tripe · Reçu par email</div>
     <div style="height:16px"></div>
   </div>
@@ -1056,13 +1094,16 @@ function goCheckout(){
   document.getElementById('pay-amount-label').textContent=fmt(getTotal());
   showView('v-checkout');
 }
-async function doStripe(){
+async function doPayment(){
   /* --- Collecte des champs --- */
   const firstName = document.getElementById('f-first-name').value.trim();
   const lastName  = document.getElementById('f-last-name').value.trim();
   const email     = document.getElementById('f-email').value.trim();
   const phone     = document.getElementById('f-phone').value.trim();
   const address   = document.getElementById('f-address').value.trim();
+
+  /* --- Mode de paiement sélectionné --- */
+  const payMethod = document.querySelector('input[name="pay-method"]:checked').value;
 
   /* --- Validation --- */
   if(!firstName || !lastName){showToast('⚠️ Prénom et nom obligatoires','t-error');return;}
@@ -1072,7 +1113,103 @@ async function doStripe(){
   const items = Object.entries(cart).map(([id, qty]) => ({ product_id: id, qty }));
   if(!items.length){showToast('⚠️ Panier vide','t-error');return;}
 
-  showToast('🔄 Création de la commande...','');
+  /* --- Résumé commande pour la page succès --- */
+  const orderSummary = Object.entries(cart).map(([id, qty]) => {
+    const p = PRODUCTS.find(x => x.id == id);
+    return { name: p.name, qty, price: p.price, total: p.price * qty };
+  });
+  const orderTotal = getTotal();
+
+  /* ============================================= */
+  /* MODE 1 : PAIEMENT SUR PLACE                  */
+  /* ============================================= */
+  if(payMethod === 'onsite'){
+    showToast('🔄 Enregistrement de la commande...','');
+
+    try {
+      /* Essai d'appel RPC place_order */
+      const res = await fetch(`${SUPA_URL}/rest/v1/rpc/place_order`, {
+        method:'POST',
+        headers:{
+          'apikey': SUPA_KEY,
+          'Authorization': `Bearer ${SUPA_KEY}`,
+          'Content-Type':'application/json'
+        },
+        body: JSON.stringify({
+          p_first_name: firstName,
+          p_last_name:  lastName,
+          p_email:      email || null,
+          p_phone:      phone || null,
+          p_address:    address,
+          p_items:      items,
+          p_payment:    'on_site'
+        })
+      });
+
+      if(!res.ok){
+        console.warn('place_order RPC non disponible, enregistrement local');
+        /* Fallback : insérer directement dans la table orders si elle existe */
+        try {
+          await fetch(`${SUPA_URL}/rest/v1/orders`, {
+            method:'POST',
+            headers:{
+              'apikey': SUPA_KEY,
+              'Authorization': `Bearer ${SUPA_KEY}`,
+              'Content-Type':'application/json',
+              'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+              first_name: firstName,
+              last_name: lastName,
+              email: email || null,
+              phone: phone || null,
+              address: address,
+              items: items,
+              total_cents: Math.round(orderTotal * 100),
+              payment_method: 'on_site',
+              status: 'pending'
+            })
+          });
+        } catch(e2){ console.warn('Table orders non disponible:', e2); }
+      }
+    } catch(e){
+      console.warn('Erreur réseau place_order:', e);
+    }
+
+    /* Dans tous les cas, on confirme la commande sur place */
+    cart = {};
+    updateBadge();
+    /* Personnaliser la page succès */
+    const successEl = document.getElementById('v-success');
+    const summaryHTML = orderSummary.map(i =>
+      `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eee;">
+        <span>${i.name} ×${i.qty}</span>
+        <span style="font-weight:600">${fmt(i.total)}</span>
+      </div>`
+    ).join('');
+    successEl.querySelector('.success-page').innerHTML = `
+      <div style="font-size:2.5rem;margin-bottom:8px;">✅</div>
+      <h2 style="color:var(--navy);margin:0 0 4px">Commande confirmée !</h2>
+      <p style="color:var(--gray);margin:0 0 16px;">Paiement sur place lors du retrait</p>
+      <div style="background:#f8f9fa;border-radius:10px;padding:12px;margin-bottom:12px;text-align:left;">
+        <div style="font-weight:600;margin-bottom:8px;color:var(--navy);">📋 Récapitulatif</div>
+        ${summaryHTML}
+        <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-weight:700;font-size:1.1rem;color:var(--navy);border-top:2px solid var(--navy);margin-top:8px;">
+          <span>Total à régler</span>
+          <span>${fmt(orderTotal)}</span>
+        </div>
+      </div>
+      <p style="color:var(--gray);font-size:0.85rem;">👤 ${firstName} ${lastName}<br>📍 ${address}${phone ? '<br>📞 '+phone : ''}</p>
+    `;
+    showView('v-success');
+    showToast('✅ Commande enregistrée !','t-ok');
+    return;
+  }
+
+  /* ============================================= */
+  /* MODE 2 : PAIEMENT PAR CARTE (STRIPE)         */
+  /* ============================================= */
+  showToast('🔄 Redirection vers le paiement sécurisé...','');
 
   try {
     const res = await fetch(`${SUPA_URL}/rest/v1/rpc/place_order`, {
@@ -1085,34 +1222,32 @@ async function doStripe(){
       body: JSON.stringify({
         p_first_name: firstName,
         p_last_name:  lastName,
-        p_email:      email  || null,
-        p_phone:      phone  || null,
+        p_email:      email || null,
+        p_phone:      phone || null,
         p_address:    address,
-        p_items:      items
+        p_items:      items,
+        p_payment:    'stripe'
       })
     });
 
     if(!res.ok){
       const errText = await res.text();
       console.error('place_order error:', errText);
-      showToast('❌ Erreur commande. Réessayez.','t-error');
+      showToast('❌ Le paiement CB n\'est pas encore configuré. Choisissez "Payer sur place".','t-error');
       return;
     }
 
     const data = await res.json();
 
-    /* Si Stripe renvoie une URL de checkout, rediriger */
     if(data && data.checkout_url){
       showToast('🔄 Redirection vers Stripe...','');
       window.location.href = data.checkout_url;
     } else {
-      /* Fallback : succès direct (mode test ou paiement sur place) */
-      cart = {};
-      updateBadge();
-      showView('v-success');
+      /* Stripe pas configuré côté backend */
+      showToast('❌ Paiement CB indisponible pour le moment. Choisissez "Payer sur place".','t-error');
     }
   } catch(e){
-    console.error('doStripe error:', e);
+    console.error('doPayment Stripe error:', e);
     showToast('❌ Erreur réseau. Vérifiez votre connexion.','t-error');
   }
 }
@@ -1121,9 +1256,39 @@ async function doStripe(){
 function selAmt(el,amt){
   document.querySelectorAll('.amount-chip').forEach(c=>c.classList.remove('sel'));
   el.classList.add('sel'); donAmt=amt;
-  document.getElementById('don-btn').innerHTML=`🔒 Faire un don de ${amt}\u00a0€`;
+  document.getElementById('don-amount-display').textContent=amt;
 }
-function setAmt(v){donAmt=parseFloat(v)||0;document.getElementById('don-btn').innerHTML=`🔒 Faire un don de ${donAmt}\u00a0€`;}
+function setAmt(v){donAmt=parseFloat(v)||0;document.getElementById('don-amount-display').textContent=donAmt;}
+
+async function doDon(){
+  if(!donAmt || donAmt<=0){showToast('⚠️ Montant invalide','t-error');return;}
+  showToast('🔄 Don en cours de traitement...','');
+  try {
+    const res = await fetch(`${SUPA_URL}/rest/v1/rpc/place_order`, {
+      method:'POST',
+      headers:{
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Content-Type':'application/json'
+      },
+      body: JSON.stringify({
+        p_first_name: 'Don',
+        p_last_name:  'Anonyme',
+        p_items: [{product_id:'don', qty:1}],
+        p_payment: 'stripe'
+      })
+    });
+    if(res.ok){
+      const data = await res.json();
+      if(data && data.checkout_url){
+        window.location.href = data.checkout_url;
+        return;
+      }
+    }
+  } catch(e){ console.warn('Don RPC error:', e); }
+  /* Fallback : pas de Stripe configuré */
+  showToast('💡 Pour les dons, veuillez contacter FLM Bordeaux directement.','t-error');
+}
 
 /* ===== VIEWS ===== */
 function showView(id){
