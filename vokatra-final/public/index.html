@@ -31,7 +31,7 @@
   --shadow: rgba(15,37,88,0.10);
   --r: 10px;
   --r-sm: 6px;
-  --bottom-nav: 70px;
+  --bottom-nav: 76px;
 }
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html { scroll-behavior:smooth; }
@@ -101,24 +101,36 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
   background:var(--navy-deep);
   border-top:2px solid rgba(201,160,32,0.3);
   display:flex;
+  gap:1px;
   z-index:200;
   box-shadow:0 -4px 20px rgba(15,37,88,0.35);
 }
 .nav-item {
   flex:1; display:flex; flex-direction:column;
   align-items:center; justify-content:center;
-  gap:3px; cursor:pointer;
-  padding:10px 4px;
-  transition:all .15s;
+  gap:5px; cursor:pointer;
+  padding:10px 8px;
+  transition:all .2s;
   border:none; background:none;
-  color:rgba(255,255,255,0.4);
+  color:rgba(255,255,255,0.5);
   -webkit-tap-highlight-color:transparent;
+  position:relative;
 }
-.nav-item.active { color:var(--gold-light); }
-.nav-item:active { background:rgba(255,255,255,0.05); }
-.nav-icon { font-size:1.25rem; line-height:1; }
-.nav-label { font-size:0.6rem; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; }
-.nav-item.active .nav-icon { filter:drop-shadow(0 0 6px rgba(232,201,74,0.6)); }
+.nav-item.active {
+  color:var(--gold-light);
+  background:rgba(201,160,32,0.1);
+}
+.nav-item.active::after {
+  content:'';
+  position:absolute; top:0; left:20%; right:20%;
+  height:3px;
+  background:var(--gold-light);
+  border-radius:0 0 3px 3px;
+}
+.nav-item:active { background:rgba(255,255,255,0.08); }
+.nav-icon { font-size:1.6rem; line-height:1; }
+.nav-label { font-size:0.75rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
+.nav-item.active .nav-icon { filter:drop-shadow(0 0 8px rgba(232,201,74,0.6)); transform:scale(1.1); }
 
 /* =====================================================
    HERO
@@ -938,7 +950,8 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
   <button class="nav-item" id="nav-don" onclick="navGo('v-don','nav-don')">
     <span class="nav-icon">🤝</span><span class="nav-label">Don</span>
   </button>
-  <button class="nav-item" id="nav-admin" onclick="navGo('v-admin-login','nav-admin')">
+  <!-- ADMIN TAB — masqué tant que le back-office n'est pas connecté à Supabase. Pour réactiver : supprimer style="display:none" -->
+  <button class="nav-item" id="nav-admin" onclick="navGo('v-admin-login','nav-admin')" style="display:none">
     <span class="nav-icon">⚙️</span><span class="nav-label">Admin</span>
   </button>
 </nav>
@@ -1484,26 +1497,4 @@ function handleStripeReturn(){
       <div style="font-size:2.5rem;margin-bottom:8px;">🎉</div>
       <h2 style="color:var(--navy);margin:0 0 4px">Paiement réussi !</h2>
       <p style="color:var(--gray);margin:0 0 16px;">Votre paiement par carte a été confirmé.</p>
-      <div style="background:#e8f5e9;border-radius:10px;padding:16px;margin-bottom:16px;">
-        <div style="font-weight:600;color:#2e7d32;">💳 Paiement accepté</div>
-        <div style="font-size:0.85rem;color:#555;margin-top:4px;">
-          Commande #${orderId ? orderId.slice(0,8) : '---'}<br>
-          Un reçu vous sera envoyé par email.
-        </div>
-      </div>
-      <button class="back-btn-main" onclick="showView('v-store');history.replaceState(null,'',location.pathname);">← Retour à la boutique</button>
-    `;
-    showView('v-success');
-    // Nettoyer l'URL
-    history.replaceState(null, '', location.pathname);
-  } else if(payment === 'cancelled'){
-    showToast('❌ Paiement annulé. Votre commande est en attente.','t-error');
-    history.replaceState(null, '', location.pathname);
-  }
-}
-
-initApp();
-handleStripeReturn();
-</script>
-</body>
-</html>
+      <div style="background:#e8f5e9;border-radius:10px;padding:16px;margin-botto
