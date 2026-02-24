@@ -1127,7 +1127,7 @@ async function doPayment(){
     showToast('🔄 Enregistrement de la commande...','');
 
     try {
-      const res = await fetch(`${SUPA_URL}/functions/v1/place-order`, {
+      const res = await fetch(`${SUPA_URL}/functions/v1/rapid-function`, {
         method:'POST',
         headers:{
           'apikey': SUPA_KEY,
@@ -1189,7 +1189,7 @@ async function doPayment(){
   showToast('🔄 Redirection vers le paiement sécurisé...','');
 
   try {
-    const res = await fetch(`${SUPA_URL}/functions/v1/place-order`, {
+    const res = await fetch(`${SUPA_URL}/functions/v1/rapid-function`, {
       method:'POST',
       headers:{
         'apikey': SUPA_KEY,
