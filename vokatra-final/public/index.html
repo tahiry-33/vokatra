@@ -1127,8 +1127,7 @@ async function doPayment(){
     showToast('🔄 Enregistrement de la commande...','');
 
     try {
-      /* Essai d'appel RPC place_order */
-      const res = await fetch(`${SUPA_URL}/rest/v1/rpc/place_order`, {
+      const res = await fetch(`${SUPA_URL}/functions/v1/place-order`, {
         method:'POST',
         headers:{
           'apikey': SUPA_KEY,
@@ -1147,33 +1146,11 @@ async function doPayment(){
       });
 
       if(!res.ok){
-        console.warn('place_order RPC non disponible, enregistrement local');
-        /* Fallback : insérer directement dans la table orders si elle existe */
-        try {
-          await fetch(`${SUPA_URL}/rest/v1/orders`, {
-            method:'POST',
-            headers:{
-              'apikey': SUPA_KEY,
-              'Authorization': `Bearer ${SUPA_KEY}`,
-              'Content-Type':'application/json',
-              'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({
-              first_name: firstName,
-              last_name: lastName,
-              email: email || null,
-              phone: phone || null,
-              address: address,
-              items: items,
-              total_cents: Math.round(orderTotal * 100),
-              payment_method: 'on_site',
-              status: 'pending'
-            })
-          });
-        } catch(e2){ console.warn('Table orders non disponible:', e2); }
+        const errText = await res.text();
+        console.warn('place-order error:', errText);
       }
     } catch(e){
-      console.warn('Erreur réseau place_order:', e);
+      console.warn('Erreur réseau place-order:', e);
     }
 
     /* Dans tous les cas, on confirme la commande sur place */
@@ -1212,7 +1189,7 @@ async function doPayment(){
   showToast('🔄 Redirection vers le paiement sécurisé...','');
 
   try {
-    const res = await fetch(`${SUPA_URL}/rest/v1/rpc/place_order`, {
+    const res = await fetch(`${SUPA_URL}/functions/v1/place-order`, {
       method:'POST',
       headers:{
         'apikey': SUPA_KEY,
@@ -1483,7 +1460,39 @@ async function initApp(){
   }
 }
 
+/* ===== GESTION RETOUR STRIPE ===== */
+function handleStripeReturn(){
+  const params = new URLSearchParams(window.location.search);
+  const payment = params.get('payment');
+  const orderId = params.get('order_id');
+  if(payment === 'success'){
+    cart = {};
+    updateBadge();
+    const successEl = document.getElementById('v-success');
+    successEl.querySelector('.success-page').innerHTML = `
+      <div style="font-size:2.5rem;margin-bottom:8px;">🎉</div>
+      <h2 style="color:var(--navy);margin:0 0 4px">Paiement réussi !</h2>
+      <p style="color:var(--gray);margin:0 0 16px;">Votre paiement par carte a été confirmé.</p>
+      <div style="background:#e8f5e9;border-radius:10px;padding:16px;margin-bottom:16px;">
+        <div style="font-weight:600;color:#2e7d32;">💳 Paiement accepté</div>
+        <div style="font-size:0.85rem;color:#555;margin-top:4px;">
+          Commande #${orderId ? orderId.slice(0,8) : '---'}<br>
+          Un reçu vous sera envoyé par email.
+        </div>
+      </div>
+      <button class="back-btn-main" onclick="showView('v-store');history.replaceState(null,'',location.pathname);">← Retour à la boutique</button>
+    `;
+    showView('v-success');
+    // Nettoyer l'URL
+    history.replaceState(null, '', location.pathname);
+  } else if(payment === 'cancelled'){
+    showToast('❌ Paiement annulé. Votre commande est en attente.','t-error');
+    history.replaceState(null, '', location.pathname);
+  }
+}
+
 initApp();
+handleStripeReturn();
 </script>
 </body>
 </html>
