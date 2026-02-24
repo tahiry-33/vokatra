@@ -998,6 +998,12 @@ function renderCartSheet(){
 
 /* ===== PRODUCTS ===== */
 let activeCat = 'all';
+const CAT_MAP = {
+  'plats_chauds': ['plat','plats_chauds'],
+  'boulangerie':  ['boulangerie'],
+  'desserts':     ['dessert','desserts'],
+  'artisanat':    ['artisanat']
+};
 function filterCat(cat){
   activeCat = cat;
   document.querySelectorAll('#cat-chips .chip').forEach(c => c.classList.remove('active'));
@@ -1006,7 +1012,7 @@ function filterCat(cat){
 }
 function renderProducts(){
   const list=document.getElementById('product-list');
-  const filtered = PRODUCTS.filter(p => p.active && (activeCat === 'all' || p.category === activeCat));
+  const filtered = PRODUCTS.filter(p => p.active && (activeCat === 'all' || (CAT_MAP[activeCat]||[]).includes(p.category)));
   if(!filtered.length){
     list.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--navy-light);font-size:0.95rem">Aucun produit dans cette catégorie.</div>';
     return;
@@ -1280,17 +1286,19 @@ async function initApp(){
   
   try {
     // Charger les produits actifs
-    const prods = await supaFetch('products', '?active=eq.true&order=name');
+    const prods = await supaFetch('products', '?select=*&active=eq.true&order=name');
+    console.log('RAW products from Supabase:', JSON.stringify(prods[0]));
     PRODUCTS = prods.map(p => ({
       id: p.id,
       name: p.name,
       desc: p.description || '',
-      price: (p.unit_price_cents ?? p.price_cents ?? 0) / 100,
+      price: parseFloat(p.unit_price ?? p.price ?? 0) || 0,
       stock: p.stock_qty ?? 0,
       active: p.active,
       emoji: p.emoji || '🍽️',
       category: p.category || 'general'
     }));
+    console.log('Mapped PRODUCTS:', JSON.stringify(PRODUCTS[0]));
     renderProducts();
 
     // Charger les dates de livraison actives
