@@ -1209,23 +1209,23 @@ async function doPayment(){
 
     if(!res.ok){
       const errText = await res.text();
-      console.error('place_order error:', errText);
-      showToast('❌ Le paiement CB n\'est pas encore configuré. Choisissez "Payer sur place".','t-error');
+      console.error('place-order error:', res.status, errText);
+      showToast('❌ Erreur ' + res.status + ': ' + errText.substring(0, 120),'t-error');
       return;
     }
 
     const data = await res.json();
+    console.log('place-order response:', JSON.stringify(data));
 
     if(data && data.checkout_url){
       showToast('🔄 Redirection vers Stripe...','');
       window.location.href = data.checkout_url;
     } else {
-      /* Stripe pas configuré côté backend */
-      showToast('❌ Paiement CB indisponible pour le moment. Choisissez "Payer sur place".','t-error');
+      showToast('❌ Réponse inattendue: ' + JSON.stringify(data).substring(0, 120),'t-error');
     }
   } catch(e){
     console.error('doPayment Stripe error:', e);
-    showToast('❌ Erreur réseau. Vérifiez votre connexion.','t-error');
+    showToast('❌ Erreur: ' + (e.message || e).toString().substring(0, 120),'t-error');
   }
 }
 
