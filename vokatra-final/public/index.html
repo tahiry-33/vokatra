@@ -834,11 +834,11 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
         <div class="amount-chip" onclick="selAmt(this,50)">50 €</div>
         <div class="amount-chip" onclick="selAmt(this,100)">100 €</div>
         <div class="amount-chip" onclick="selAmt(this,200)">200 €</div>
-        <div class="amount-chip" onclick="this.classList.add('sel');document.querySelectorAll('.amount-chip').forEach(c=>c!==this&&c.classList.remove('sel'))">Autre</div>
+        <div class="amount-chip" id="chip-autre" onclick="selAutre(this)">Autre</div>
       </div>
       <div class="custom-row">
         <span class="curr-pfx">€</span>
-        <input type="number" placeholder="Montant libre..." min="1" oninput="setAmt(this.value)" inputmode="numeric">
+        <input type="number" id="don-input" value="10" placeholder="Montant libre..." min="1" oninput="onDonInput(this.value)" inputmode="numeric" disabled style="opacity:0.5">
       </div>
     </div>
     <div class="form-card">
@@ -1237,8 +1237,15 @@ function selAmt(el,amt){
   document.querySelectorAll('.amount-chip').forEach(c=>c.classList.remove('sel'));
   el.classList.add('sel'); donAmt=amt;
   document.getElementById('don-amount-display').textContent=amt;
+  var inp=document.getElementById('don-input'); inp.value=amt; inp.disabled=true; inp.style.opacity='0.5';
 }
-function setAmt(v){donAmt=parseFloat(v)||0;document.getElementById('don-amount-display').textContent=donAmt;}
+function selAutre(el){
+  document.querySelectorAll('.amount-chip').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel'); donAmt=0;
+  var inp=document.getElementById('don-input'); inp.value=''; inp.disabled=false; inp.style.opacity='1'; inp.focus();
+  document.getElementById('don-amount-display').textContent='…';
+}
+function onDonInput(v){donAmt=parseFloat(v)||0;document.getElementById('don-amount-display').textContent=donAmt||'…';}
 
 async function doDon(){
   if(!donAmt || donAmt<=0){showToast('⚠️ Montant invalide','t-error');return;}
