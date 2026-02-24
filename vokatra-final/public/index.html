@@ -702,24 +702,24 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
       <div class="form-group form-row-2">
         <div>
           <label class="form-label">Prénom <span class="req">*</span></label>
-          <input type="text" class="f-input" placeholder="Jean" autocomplete="given-name">
+          <input type="text" class="f-input" id="f-first-name" placeholder="Jean" autocomplete="given-name">
         </div>
         <div>
           <label class="form-label">Nom <span class="req">*</span></label>
-          <input type="text" class="f-input" placeholder="Rakoto" autocomplete="family-name">
+          <input type="text" class="f-input" id="f-last-name" placeholder="Rakoto" autocomplete="family-name">
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Email <small style="font-weight:400;color:var(--gray)">(reçu)</small></label>
-        <input type="email" class="f-input" placeholder="jean.rakoto@email.com" autocomplete="email">
+        <input type="email" class="f-input" id="f-email" placeholder="jean.rakoto@email.com" autocomplete="email">
       </div>
       <div class="form-group">
         <label class="form-label">Téléphone</label>
-        <input type="tel" class="f-input" placeholder="+33 6 12 34 56 78" autocomplete="tel">
+        <input type="tel" class="f-input" id="f-phone" placeholder="+33 6 12 34 56 78" autocomplete="tel">
       </div>
       <div class="form-group">
         <label class="form-label">Adresse <span class="req">*</span></label>
-        <input type="text" class="f-input" placeholder="12 rue des Acacias, Bordeaux" autocomplete="street-address">
+        <input type="text" class="f-input" id="f-address" placeholder="12 rue des Acacias, Bordeaux" autocomplete="street-address">
       </div>
     </div>
 
@@ -727,11 +727,11 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
       <div class="form-card-title">⛪ Église & Section</div>
       <div class="form-group">
         <label class="form-label">Nom de l'église <span class="req">*</span></label>
-        <input type="text" class="f-input" placeholder="FLM Bordeaux">
+        <input type="text" class="f-input" id="f-church" placeholder="FLM Bordeaux">
       </div>
       <div class="form-group">
         <label class="form-label">Section <span class="req">*</span></label>
-        <select class="f-select">
+        <select class="f-select" id="f-section">
           <option value="">Sélectionner...</option>
           <option>FIFIL</option><option>FKTLM</option><option>Sampana Mozika</option>
           <option>FBL</option><option>FDL</option><option>Diakona</option><option>Saloma</option>
@@ -743,7 +743,7 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
       <div class="form-card-title">📦 Livraison</div>
       <div class="form-group">
         <label class="form-label">Adresse de livraison <span class="req">*</span></label>
-        <input type="text" class="f-input" placeholder="Même que mon adresse">
+        <input type="text" class="f-input" id="f-delivery-address" placeholder="Même que mon adresse">
       </div>
       <div class="form-group">
         <label class="form-label">Date de livraison <span class="req">*</span></label>
@@ -1038,9 +1038,65 @@ function goCheckout(){
   document.getElementById('pay-amount-label').textContent=fmt(getTotal());
   showView('v-checkout');
 }
-function doStripe(){
-  showToast('🔄 Redirection Stripe...','');
-  setTimeout(()=>{cart={};updateBadge();showView('v-success');},1400);
+async function doStripe(){
+  /* --- Collecte des champs --- */
+  const firstName = document.getElementById('f-first-name').value.trim();
+  const lastName  = document.getElementById('f-last-name').value.trim();
+  const email     = document.getElementById('f-email').value.trim();
+  const phone     = document.getElementById('f-phone').value.trim();
+  const address   = document.getElementById('f-address').value.trim();
+
+  /* --- Validation --- */
+  if(!firstName || !lastName){showToast('⚠️ Prénom et nom obligatoires','t-error');return;}
+  if(!address){showToast('⚠️ Adresse obligatoire','t-error');return;}
+
+  /* --- Construction des lignes panier --- */
+  const items = Object.entries(cart).map(([id, qty]) => ({ product_id: id, qty }));
+  if(!items.length){showToast('⚠️ Panier vide','t-error');return;}
+
+  showToast('🔄 Création de la commande...','');
+
+  try {
+    const res = await fetch(`${SUPA_URL}/rest/v1/rpc/place_order`, {
+      method:'POST',
+      headers:{
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Content-Type':'application/json'
+      },
+      body: JSON.stringify({
+        p_first_name: firstName,
+        p_last_name:  lastName,
+        p_email:      email  || null,
+        p_phone:      phone  || null,
+        p_address:    address,
+        p_items:      items
+      })
+    });
+
+    if(!res.ok){
+      const errText = await res.text();
+      console.error('place_order error:', errText);
+      showToast('❌ Erreur commande. Réessayez.','t-error');
+      return;
+    }
+
+    const data = await res.json();
+
+    /* Si Stripe renvoie une URL de checkout, rediriger */
+    if(data && data.checkout_url){
+      showToast('🔄 Redirection vers Stripe...','');
+      window.location.href = data.checkout_url;
+    } else {
+      /* Fallback : succès direct (mode test ou paiement sur place) */
+      cart = {};
+      updateBadge();
+      showView('v-success');
+    }
+  } catch(e){
+    console.error('doStripe error:', e);
+    showToast('❌ Erreur réseau. Vérifiez votre connexion.','t-error');
+  }
 }
 
 /* ===== DON ===== */
