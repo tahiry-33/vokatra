@@ -1239,9 +1239,10 @@ function setAmt(v){donAmt=parseFloat(v)||0;document.getElementById('don-amount-d
 
 async function doDon(){
   if(!donAmt || donAmt<=0){showToast('⚠️ Montant invalide','t-error');return;}
-  showToast('🔄 Don en cours de traitement...','');
+  showToast('🔄 Redirection vers le paiement...','');
   try {
-    const res = await fetch(`${SUPA_URL}/rest/v1/rpc/place_order`, {
+    /* Appel direct Stripe via Edge Function dédiée */
+    const res = await fetch(`${SUPA_URL}/functions/v1/rapid-function`, {
       method:'POST',
       headers:{
         'apikey': SUPA_KEY,
@@ -1250,21 +1251,31 @@ async function doDon(){
       },
       body: JSON.stringify({
         p_first_name: 'Don',
-        p_last_name:  'Anonyme',
-        p_items: [{product_id:'don', qty:1}],
-        p_payment: 'stripe'
+        p_last_name:  'FLM Bordeaux',
+        p_email: null,
+        p_phone: null,
+        p_address: 'Don en ligne',
+        p_items: [],
+        p_payment: 'stripe_don',
+        p_don_amount: donAmt
       })
     });
-    if(res.ok){
-      const data = await res.json();
-      if(data && data.checkout_url){
-        window.location.href = data.checkout_url;
-        return;
-      }
+    if(!res.ok){
+      const errText = await res.text();
+      console.error('Don error:', res.status, errText);
+      showToast('❌ Erreur: ' + errText.substring(0, 120),'t-error');
+      return;
     }
-  } catch(e){ console.warn('Don RPC error:', e); }
-  /* Fallback : pas de Stripe configuré */
-  showToast('💡 Pour les dons, veuillez contacter FLM Bordeaux directement.','t-error');
+    const data = await res.json();
+    if(data && data.checkout_url){
+      window.location.href = data.checkout_url;
+    } else {
+      showToast('❌ Réponse inattendue: ' + JSON.stringify(data).substring(0, 120),'t-error');
+    }
+  } catch(e){
+    console.error('Don error:', e);
+    showToast('❌ Erreur: ' + (e.message || e).toString().substring(0, 120),'t-error');
+  }
 }
 
 /* ===== VIEWS ===== */
