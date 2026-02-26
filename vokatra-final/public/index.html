@@ -1671,6 +1671,24 @@ function handleStripeReturn(){
   if(payment === 'success'){
     cart = {};
     updateBadge();
+
+    /* ── AUTO-UPDATE payment_status → 'paid' dans Supabase ── */
+    if(orderId){
+      fetch(SUPA_URL + '/rest/v1/orders?id=eq.' + orderId, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + SUPA_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ payment_status: 'paid' })
+      }).then(r => {
+        if(r.ok) console.log('✅ Commande ' + orderId + ' marquée payée automatiquement');
+        else console.warn('⚠️ Échec MAJ statut:', r.status);
+      }).catch(e => console.warn('⚠️ Erreur MAJ statut:', e));
+    }
+
     const successEl = document.getElementById('v-success');
     successEl.querySelector('.success-page').innerHTML = `
       <div style="font-size:2.5rem;margin-bottom:8px;">🎉</div>
@@ -1686,10 +1704,22 @@ function handleStripeReturn(){
       <button class="back-btn-main" onclick="showView('v-store');history.replaceState(null,'',location.pathname);">← Retour à la boutique</button>
     `;
     showView('v-success');
-    // Nettoyer l'URL
     history.replaceState(null, '', location.pathname);
   } else if(payment === 'cancelled'){
-    showToast('❌ Paiement annulé. Votre commande est en attente.','t-error');
+    /* ── Paiement annulé → on pourrait marquer 'cancelled' aussi ── */
+    if(orderId){
+      fetch(SUPA_URL + '/rest/v1/orders?id=eq.' + orderId, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + SUPA_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ payment_status: 'cancelled' })
+      }).catch(e => console.warn('⚠️ Erreur MAJ annulation:', e));
+    }
+    showToast('❌ Paiement annulé. Votre commande a été annulée.','t-error');
     history.replaceState(null, '', location.pathname);
   }
 }
