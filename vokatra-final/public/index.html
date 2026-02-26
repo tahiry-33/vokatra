@@ -1097,6 +1097,7 @@ async function doPayment(){
   const email     = document.getElementById('f-email').value.trim();
   const phone     = document.getElementById('f-phone').value.trim();
   const address   = document.getElementById('f-address').value.trim();
+  const deliveryDate = document.getElementById('delivery-select').value;
 
   /* --- Mode de paiement sélectionné --- */
   const payMethod = document.querySelector('input[name="pay-method"]:checked').value;
@@ -1104,6 +1105,7 @@ async function doPayment(){
   /* --- Validation --- */
   if(!firstName || !lastName){showToast('⚠️ Prénom et nom obligatoires','t-error');return;}
   if(!address){showToast('⚠️ Adresse obligatoire','t-error');return;}
+  if(!deliveryDate){showToast('⚠️ Veuillez choisir une date de retrait','t-error');return;}
 
   /* --- Construction des lignes panier --- */
   const items = Object.entries(cart).map(([id, qty]) => ({ product_id: id, qty }));
@@ -1137,7 +1139,8 @@ async function doPayment(){
           p_phone:      phone || null,
           p_address:    address,
           p_items:      items,
-          p_payment:    'on_site'
+          p_payment:    'on_site',
+          p_delivery_date: deliveryDate
         })
       });
 
@@ -1199,7 +1202,8 @@ async function doPayment(){
         p_phone:      phone || null,
         p_address:    address,
         p_items:      items,
-        p_payment:    'stripe'
+        p_payment:    'stripe',
+        p_delivery_date: deliveryDate
       })
     });
 
@@ -1348,6 +1352,7 @@ async function loadAdminData(){
         phone: o.phone || '–',
         address: o.address || '–',
         section: o.section || '–',
+        delivery_date: o.delivery_date || null,
         total: totalEur,
         total_fmt: fmt(totalEur),
         payment_method: o.payment_method || o.payment || '–',
@@ -1494,6 +1499,9 @@ function buildOrders(){
       const itemsDetail = o.items.length
         ? o.items.map(i => '<div style="padding:2px 0">- ' + i.name + ' x' + i.qty + ' = ' + fmt(i.price*i.qty) + '</div>').join('')
         : '<div style="font-style:italic;color:var(--gray)">Details produits non disponibles</div>';
+      const delivBadge = o.delivery_date 
+        ? '<span style="background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:10px;font-size:0.72rem;font-weight:600">📅 ' + o.delivery_date + '</span>' 
+        : '';
       rowsHTML += `<div class="order-row" style="cursor:pointer" onclick="this.querySelector('.order-expand').classList.toggle('show')">
         <div class="order-row-top">
           <span class="order-client">${o.client}</span>
@@ -1504,11 +1512,13 @@ function buildOrders(){
           ${psBadge(o.ps)}
           <span class="order-meta">${o.payment_method==='on_site'?'Sur place':'Carte'}</span>
           <span class="order-meta">${o.date}</span>
+          ${delivBadge}
         </div>
         <div class="order-expand">
           <div style="padding:10px 0;border-top:1px solid var(--gray-light);font-size:0.82rem;color:#555;">
             <div>Email: <strong>${o.email}</strong></div>
             <div>Tel: ${o.phone} | Adresse: ${o.address}</div>
+            ${o.delivery_date ? '<div style="margin-top:6px;"><span style="font-weight:600;color:#1565c0;">📅 Retrait :</span> ' + o.delivery_date + '</div>' : '<div style="margin-top:6px;color:#999;font-style:italic;">Aucune date de retrait choisie</div>'}
             <div style="margin-top:8px;font-weight:600;color:var(--navy);">Produits :</div>
             ${itemsDetail}
             ${o.stripe_id !== '–' ? '<div style="margin-top:6px;font-size:0.75rem;color:#888">Stripe: ' + o.stripe_id.slice(0,30) + '...</div>' : ''}
@@ -1588,10 +1598,10 @@ function buildDonations(){
 function exportCSV(type){
   let csv = '';
   if(type==='orders'){
-    csv = 'ID;Date;Client;Email;Telephone;Adresse;Produits;Total;Paiement;Statut\n';
+    csv = 'ID;Date;Client;Email;Telephone;Adresse;Date retrait;Produits;Total;Paiement;Statut\n';
     ORDERS.forEach(o => {
       const items = o.items.map(i=>i.name+' x'+i.qty).join(', ') || '-';
-      csv += [o.short_id, o.date, '"'+o.client+'"', o.email, o.phone, '"'+o.address+'"', '"'+items+'"', o.total, o.payment_method, o.ps].join(';') + '\n';
+      csv += [o.short_id, o.date, '"'+o.client+'"', o.email, o.phone, '"'+o.address+'"', o.delivery_date||'-', '"'+items+'"', o.total, o.payment_method, o.ps].join(';') + '\n';
     });
   } else {
     csv = 'ID;Date;Donateur;Email;Montant;Statut\n';
