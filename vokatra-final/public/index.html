@@ -1300,6 +1300,7 @@ function navGo(view,navId){
 /* ===== ADMIN ===== */
 const ADMIN_SECRET = 'flm2025';
 let adminFilter = { status: 'all', dateFrom: '', dateTo: '' };
+let currentAdminPanel = 'orders';
 
 function checkAdminAccess(){
   const params = new URLSearchParams(window.location.search);
@@ -1333,9 +1334,10 @@ async function loadAdminData(){
       const items = rawItems.filter(i => i.order_id === o.id);
       const itemDetails = items.map(i => {
         const p = PRODUCTS.find(x => x.id === i.product_id);
-        return { name: p ? p.name : i.product_id, qty: i.quantity || i.qty || 1, price: p ? p.price : 0 };
+        const priceEur = i.unit_price_cents ? i.unit_price_cents / 100 : (p ? p.price : 0);
+        return { name: i.product_name || (p ? p.name : 'Produit'), qty: i.quantity || i.qty || 1, price: priceEur };
       });
-      const total = o.total_amount || o.total || itemDetails.reduce((s,i)=>s+i.price*i.qty,0);
+      const totalEur = o.total_cents ? o.total_cents / 100 : (o.total_amount || o.total || itemDetails.reduce((s,i)=>s+i.price*i.qty,0));
       return {
         id: o.id,
         short_id: '#VK-' + (o.id || '').toString().slice(0,6).toUpperCase(),
@@ -1346,8 +1348,8 @@ async function loadAdminData(){
         phone: o.phone || '–',
         address: o.address || '–',
         section: o.section || '–',
-        total: total,
-        total_fmt: fmt(total),
+        total: totalEur,
+        total_fmt: fmt(totalEur),
         payment_method: o.payment_method || o.payment || '–',
         ps: o.payment_status || o.status || 'pending',
         os: o.order_status || 'new',
@@ -1384,11 +1386,13 @@ async function initAdmin(){
   }
 }
 function adminNav(e,panel){
+  currentAdminPanel = panel;
   document.querySelectorAll('.sidebar-nav-item').forEach(i=>i.classList.remove('active'));
   e.currentTarget.classList.add('active');
   document.getElementById('admin-main').innerHTML=buildPanel(panel);
 }
 function adminTabMobile(btn,panel){
+  currentAdminPanel = panel;
   document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('admin-content-mobile').innerHTML=buildPanel(panel);
@@ -1401,6 +1405,56 @@ function buildPanel(p){
 }
 
 function psBadge(ps){const m={paid:'b-paid ✓\u00a0Payé',succeeded:'b-paid ✓\u00a0Réussi',complete:'b-paid ✓\u00a0Complet',pending:'b-pending ⏳\u00a0Attente',failed:'b-failed ✗\u00a0Échec',cancelled:'b-failed ✗\u00a0Annulé'};const[c,...t]=m[ps]?.split(' ')||['b-pending','⏳',ps||'?'];return`<span class="badge ${c}">${t.join(' ')}</span>`;}
+
+/* ─── Admin: update payment status in Supabase ─── */
+async function updateOrderStatus(orderId, newStatus, el){
+  try {
+    const resp = await fetch(SUPA_URL + '/rest/v1/orders?id=eq.' + orderId, {
+      method: 'PATCH',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ payment_status: newStatus })
+    });
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    /* Update local data */
+    const order = ORDERS.find(o=>o.id===orderId) || DONATIONS.find(o=>o.id===orderId);
+    if(order){ order.ps = newStatus; order.payment_status = newStatus; }
+    showToast('✅ Statut mis à jour → ' + newStatus, 't-ok');
+    refreshAdminPanel(currentAdminPanel);
+  } catch(e){
+    console.error('Update failed:', e);
+    showToast('❌ Erreur MAJ: ' + e.message + ' — Vérifiez RLS policies', 't-error');
+  }
+}
+
+async function bulkSyncStripe(){
+  const stripePending = ORDERS.filter(o => o.ps === 'pending' && o.stripe_id && o.stripe_id !== '–' && o.stripe_id.startsWith('cs_'));
+  if(stripePending.length === 0){ showToast('Aucune commande Stripe en attente',''); return; }
+  showToast('🔄 Vérification de ' + stripePending.length + ' session(s) Stripe...','');
+  let updated = 0;
+  for(const o of stripePending){
+    try {
+      /* Call edge function to check Stripe session status */
+      const resp = await fetch(SUPA_URL + '/functions/v1/check-stripe-session', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: o.stripe_id, order_id: o.id })
+      });
+      if(resp.ok){
+        const data = await resp.json();
+        if(data.status && data.status !== 'pending'){
+          o.ps = data.status;
+          updated++;
+        }
+      }
+    } catch(e){ console.warn('Check failed for', o.id, e); }
+  }
+  if(updated > 0){
+    showToast('✅ ' + updated + ' commande(s) mise(s) à jour','t-ok');
+    refreshAdminPanel('orders');
+  } else {
+    showToast('ℹ️ Aucune mise à jour Stripe (fonction Edge non trouvée ? Utilisez les boutons manuels)','');
+  }
+}
 function osBadge(os){const m={confirmed:'b-confirmed',new:'b-new',preparing:'b-preparing',delivered:'b-active'};return`<span class="badge ${m[os]||'b-new'}">${os}</span>`;}
 
 function buildOrders(){
@@ -1408,6 +1462,7 @@ function buildOrders(){
   const totalCA = paidOrders.reduce((s,o)=>s+(o.total||0),0);
   const pendingCount = ORDERS.filter(o=>o.ps==='pending').length;
   const totalDons = DONATIONS.reduce((s,d)=>s+(d.total||0),0);
+  const totalAll = ORDERS.reduce((s,o)=>s+(o.total||0),0);
   let filtered = [...ORDERS];
   if(adminFilter.status !== 'all') filtered = filtered.filter(o => o.ps === adminFilter.status);
   if(adminFilter.dateFrom) filtered = filtered.filter(o => o.raw_date >= adminFilter.dateFrom);
@@ -1418,9 +1473,10 @@ function buildOrders(){
   </div>
   <div class="stats-grid">
     <div class="stat-card c-navy"><div class="stat-label">Commandes</div><div class="stat-value navy">${ORDERS.length}</div></div>
-    <div class="stat-card c-gold"><div class="stat-label">CA</div><div class="stat-value gold">${fmt(totalCA)}</div></div>
+    <div class="stat-card c-gold"><div class="stat-label">CA confirmé</div><div class="stat-value gold">${fmt(totalCA)}</div></div>
     <div class="stat-card c-red"><div class="stat-label">Attente</div><div class="stat-value red">${pendingCount}</div></div>
     <div class="stat-card c-green"><div class="stat-label">Dons</div><div class="stat-value green">${fmt(totalDons)}</div></div>
+    <div class="stat-card c-navy" style="border-color:var(--navy)"><div class="stat-label">CA total (tout)</div><div class="stat-value navy">${fmt(totalAll)}</div></div>
   </div>`;
   const filterHTML = `<div class="admin-card"><div class="filter-bar">
     <select class="f-select-sm" onchange="adminFilter.status=this.value;refreshAdminPanel('orders')">
@@ -1455,6 +1511,12 @@ function buildOrders(){
             <div>Tel: ${o.phone} | Adresse: ${o.address}</div>
             <div style="margin-top:8px;font-weight:600;color:var(--navy);">Produits :</div>
             ${itemsDetail}
+            ${o.stripe_id !== '–' ? '<div style="margin-top:6px;font-size:0.75rem;color:#888">Stripe: ' + o.stripe_id.slice(0,30) + '...</div>' : ''}
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap" onclick="event.stopPropagation()">
+              ${o.ps==='pending' ? '<button class="btn-sm-s" style="background:var(--green-light);color:#fff;border:0;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:0.78rem" onclick="updateOrderStatus(\''+o.id+'\',\'paid\',this)">✓ Marquer payé</button>' : ''}
+              ${o.ps==='pending' ? '<button class="btn-sm-s" style="background:#dc3545;color:#fff;border:0;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:0.78rem" onclick="updateOrderStatus(\''+o.id+'\',\'failed\',this)">✗ Échec</button>' : ''}
+              ${o.ps!=='pending' ? '<button class="btn-sm-s" style="background:var(--gray);color:#fff;border:0;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:0.78rem" onclick="updateOrderStatus(\''+o.id+'\',\'pending\',this)">↩ Remettre en attente</button>' : ''}
+            </div>
           </div>
         </div>
       </div>`;
@@ -1505,9 +1567,18 @@ function buildDonations(){
     html += '<div style="padding:24px;text-align:center;color:var(--gray)">Aucun don enregistre</div>';
   } else {
     DONATIONS.forEach(d => {
-      html += `<div class="order-row">
+      html += `<div class="order-row" style="cursor:pointer" onclick="this.querySelector('.order-expand').classList.toggle('show')">
         <div class="order-row-top"><span class="order-client">${d.client}</span><span style="font-weight:700;color:var(--green-light)">${d.total_fmt}</span></div>
         <div class="order-row-bot"><span class="order-id-label">${d.short_id}</span>${psBadge(d.ps)}<span class="order-meta">${d.email}</span><span class="order-meta">${d.date}</span></div>
+        <div class="order-expand">
+          <div style="padding:10px 0;border-top:1px solid var(--gray-light);font-size:0.82rem;color:#555;">
+            ${d.stripe_id !== '–' ? '<div style="font-size:0.75rem;color:#888">Stripe: ' + d.stripe_id.slice(0,30) + '...</div>' : ''}
+            <div style="margin-top:8px;display:flex;gap:8px" onclick="event.stopPropagation()">
+              ${d.ps==='pending' ? '<button style="background:var(--green-light);color:#fff;border:0;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:0.78rem" onclick="updateOrderStatus(\''+d.id+'\',\'paid\',this)">✓ Marquer payé</button>' : ''}
+              ${d.ps!=='pending' ? '<button style="background:var(--gray);color:#fff;border:0;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:0.78rem" onclick="updateOrderStatus(\''+d.id+'\',\'pending\',this)">↩ Remettre en attente</button>' : ''}
+            </div>
+          </div>
+        </div>
       </div>`;
     });
   }
