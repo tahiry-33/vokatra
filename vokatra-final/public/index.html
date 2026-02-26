@@ -1662,7 +1662,7 @@ async function initApp(){
     if(sel && dates.length){
       dates.forEach(d => {
         const opt = document.createElement('option');
-        opt.value = d.id;
+        opt.value = d.label || d.delivery_date;
         opt.textContent = d.label || d.delivery_date;
         sel.appendChild(opt);
       });
