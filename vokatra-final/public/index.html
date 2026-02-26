@@ -489,6 +489,8 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
 .btn-sm-s { padding:8px 14px; background:var(--cream); color:var(--charcoal); border:1.5px solid var(--gray-light); border-radius:20px; font-size:0.75rem; font-weight:600; cursor:pointer; }
 
 /* Product admin cards */
+.order-expand { max-height:0;overflow:hidden;transition:max-height .3s ease; }
+.order-expand.show { max-height:300px; }
 .product-admin-row { padding:14px 16px; border-bottom:1px solid var(--gray-light); }
 .product-admin-row:last-child { border-bottom:none; }
 .product-admin-row-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:8px; }
@@ -868,9 +870,9 @@ input, select { font-family:'DM Sans',sans-serif; font-size:16px; /* prevent zoo
       <div class="login-title">VOKATRA Admin</div>
       <div class="login-sub">FLM Bordeaux · Gestion</div>
       <div style="display:flex;flex-direction:column;gap:12px">
-        <div class="form-group"><label class="form-label">Email</label><input type="email" class="f-input" value="admin@flm-bordeaux.fr" style="background:var(--cream)"></div>
-        <div class="form-group"><label class="form-label">Mot de passe</label><input type="password" class="f-input" value="••••••••" style="background:var(--cream)"></div>
-        <button class="login-btn" onclick="showView('v-admin')">Se connecter →</button>
+        <div class="form-group"><label class="form-label">Mot de passe admin</label><input type="password" id="admin-pw-input" class="f-input" placeholder="Entrez le code admin" style="background:var(--cream)" onkeydown="if(event.key==='Enter')adminLogin()"></div>
+
+        <button class="login-btn" onclick="adminLogin()">Se connecter →</button>
       </div>
     </div>
   </div>
@@ -967,18 +969,9 @@ async function supaFetch(path, params=''){
 
 /* ===== DATA ===== */
 let PRODUCTS = [];
-const ORDERS = [
-  {id:"#VK-0024",date:"14/02/25",client:"Rakoto Jean",section:"FIFIL",total:"23,50 €",delivery:"09/03/25",ps:"paid",os:"confirmed"},
-  {id:"#VK-0023",date:"13/02/25",client:"Rasoa Marie",section:"Diakona",total:"11,00 €",delivery:"09/03/25",ps:"paid",os:"confirmed"},
-  {id:"#VK-0022",date:"12/02/25",client:"Andrianaly Paul",section:"FKTLM",total:"47,00 €",delivery:"23/03/25",ps:"pending",os:"new"},
-  {id:"#VK-0021",date:"11/02/25",client:"Raherimanantsoa L.",section:"FBL",total:"19,50 €",delivery:"09/03/25",ps:"failed",os:"new"},
-  {id:"#VK-0020",date:"10/02/25",client:"Rabearison Nivo",section:"Saloma",total:"33,00 €",delivery:"23/03/25",ps:"paid",os:"preparing"},
-];
-const DONATIONS = [
-  {id:"#DN-0008",date:"13/02/25",donor:"Rasoamampionona F.",amount:"50 €",section:"FIFIL",status:"paid"},
-  {id:"#DN-0007",date:"11/02/25",donor:"Randriamamonjy A.",amount:"20 €",section:"FDL",status:"paid"},
-  {id:"#DN-0006",date:"09/02/25",donor:"Anonyme",amount:"100 €",section:"–",status:"paid"},
-];
+let ORDERS = [];
+let DONATIONS = [];
+let ADMIN_LOADED = false;
 
 let cart = {};
 let donAmt = 10;
@@ -1305,7 +1298,80 @@ function navGo(view,navId){
 }
 
 /* ===== ADMIN ===== */
-function initAdmin(){
+const ADMIN_SECRET = 'flm2025';
+let adminFilter = { status: 'all', dateFrom: '', dateTo: '' };
+
+function checkAdminAccess(){
+  const params = new URLSearchParams(window.location.search);
+  if(params.get('admin') === ADMIN_SECRET){
+    showView('v-admin-login');
+    return true;
+  }
+  return false;
+}
+
+async function adminLogin(){
+  const pw = document.getElementById('admin-pw-input').value.trim();
+  if(pw === ADMIN_SECRET){
+    showView('v-admin');
+  } else {
+    showToast('❌ Mot de passe incorrect','t-error');
+  }
+}
+
+async function loadAdminData(){
+  if(ADMIN_LOADED) return;
+  showToast('🔄 Chargement des données...','');
+  try {
+    /* Fetch orders with items */
+    const rawOrders = await supaFetch('orders','?select=*&order=created_at.desc&limit=200');
+    let rawItems = [];
+    try { rawItems = await supaFetch('order_items','?select=*'); } catch(e){ console.warn('order_items not found, trying alternative'); }
+    
+    /* Map orders */
+    ORDERS = rawOrders.map(o => {
+      const items = rawItems.filter(i => i.order_id === o.id);
+      const itemDetails = items.map(i => {
+        const p = PRODUCTS.find(x => x.id === i.product_id);
+        return { name: p ? p.name : i.product_id, qty: i.quantity || i.qty || 1, price: p ? p.price : 0 };
+      });
+      const total = o.total_amount || o.total || itemDetails.reduce((s,i)=>s+i.price*i.qty,0);
+      return {
+        id: o.id,
+        short_id: '#VK-' + (o.id || '').toString().slice(0,6).toUpperCase(),
+        date: new Date(o.created_at).toLocaleDateString('fr-FR'),
+        raw_date: o.created_at,
+        client: (o.first_name||'') + ' ' + (o.last_name||''),
+        email: o.email || '–',
+        phone: o.phone || '–',
+        address: o.address || '–',
+        section: o.section || '–',
+        total: total,
+        total_fmt: fmt(total),
+        payment_method: o.payment_method || o.payment || '–',
+        ps: o.payment_status || o.status || 'pending',
+        os: o.order_status || 'new',
+        items: itemDetails,
+        stripe_id: o.stripe_session_id || o.stripe_payment_intent || '–'
+      };
+    });
+
+    /* Separate donations from orders (payment = stripe_don or items empty) */
+    DONATIONS = ORDERS.filter(o => o.payment_method === 'stripe_don' || (o.items.length === 0 && o.client.includes('Don')));
+    ORDERS = ORDERS.filter(o => o.payment_method !== 'stripe_don' && !(o.items.length === 0 && o.client.includes('Don')));
+    
+    /* If no order_items found, still show orders with total from Stripe */
+    ADMIN_LOADED = true;
+    showToast('✅ ' + ORDERS.length + ' commande(s) · ' + DONATIONS.length + ' don(s)','t-ok');
+  } catch(e) {
+    console.error('Admin data load error:', e);
+    showToast('⚠️ Chargement partiel : ' + e.message,'t-error');
+    ADMIN_LOADED = true;
+  }
+}
+
+async function initAdmin(){
+  await loadAdminData();
   const isDesktop=window.innerWidth>=640;
   if(isDesktop){
     document.getElementById('admin-layout').style.display='grid';
@@ -1334,97 +1400,142 @@ function buildPanel(p){
   if(p==='donations')return buildDonations();
 }
 
-function psBadge(ps){const m={paid:'b-paid ✓\u00a0Payé',pending:'b-pending ⏳\u00a0Attente',failed:'b-failed ✗\u00a0Échec'};const[c,...t]=m[ps]?.split(' ')||['b-paid'];return`<span class="badge ${c}">${t.join(' ')}</span>`;}
+function psBadge(ps){const m={paid:'b-paid ✓\u00a0Payé',succeeded:'b-paid ✓\u00a0Réussi',complete:'b-paid ✓\u00a0Complet',pending:'b-pending ⏳\u00a0Attente',failed:'b-failed ✗\u00a0Échec',cancelled:'b-failed ✗\u00a0Annulé'};const[c,...t]=m[ps]?.split(' ')||['b-pending','⏳',ps||'?'];return`<span class="badge ${c}">${t.join(' ')}</span>`;}
 function osBadge(os){const m={confirmed:'b-confirmed',new:'b-new',preparing:'b-preparing',delivered:'b-active'};return`<span class="badge ${m[os]||'b-new'}">${os}</span>`;}
 
 function buildOrders(){
-  return`<div class="admin-topbar-m">
-    <div><div class="admin-page-title">Commandes</div><div class="admin-subtitle">${ORDERS.length} commandes · ${ORDERS.filter(o=>o.ps==='paid').length} payées</div></div>
-    <button class="btn-outline">⬇ CSV</button>
+  const paidOrders = ORDERS.filter(o=>o.ps==='paid'||o.ps==='succeeded'||o.ps==='complete');
+  const totalCA = paidOrders.reduce((s,o)=>s+(o.total||0),0);
+  const pendingCount = ORDERS.filter(o=>o.ps==='pending').length;
+  const totalDons = DONATIONS.reduce((s,d)=>s+(d.total||0),0);
+  let filtered = [...ORDERS];
+  if(adminFilter.status !== 'all') filtered = filtered.filter(o => o.ps === adminFilter.status);
+  if(adminFilter.dateFrom) filtered = filtered.filter(o => o.raw_date >= adminFilter.dateFrom);
+  if(adminFilter.dateTo) filtered = filtered.filter(o => o.raw_date <= adminFilter.dateTo + 'T23:59:59');
+  const statsHTML = `<div class="admin-topbar-m">
+    <div><div class="admin-page-title">Commandes</div><div class="admin-subtitle">${ORDERS.length} commande(s)</div></div>
+    <button class="btn-outline" onclick="exportCSV('orders')">Export CSV</button>
   </div>
   <div class="stats-grid">
-    <div class="stat-card c-navy"><div class="stat-label">Commandes</div><div class="stat-value navy">${ORDERS.length}</div><div class="stat-delta">Ce mois</div></div>
-    <div class="stat-card c-gold"><div class="stat-label">CA confirmé</div><div class="stat-value gold">134 €</div><div class="stat-delta"><span class="up">↑ +12%</span></div></div>
-    <div class="stat-card c-red"><div class="stat-label">En attente</div><div class="stat-value red">1</div></div>
-    <div class="stat-card c-green"><div class="stat-label">Dons</div><div class="stat-value green">170 €</div></div>
-  </div>
-  <div class="admin-card">
-    <div class="filter-bar">
-      <input type="text" class="f-input-search" placeholder="🔍 Rechercher...">
-      <select class="f-select-sm"><option>Tous statuts</option><option>Payé</option><option>En attente</option><option>Échec</option></select>
-      <select class="f-select-sm"><option>Toutes dates</option><option>09/03</option><option>23/03</option></select>
-    </div>
-    <div class="order-list">${ORDERS.map(o=>`
-      <div class="order-row">
+    <div class="stat-card c-navy"><div class="stat-label">Commandes</div><div class="stat-value navy">${ORDERS.length}</div></div>
+    <div class="stat-card c-gold"><div class="stat-label">CA</div><div class="stat-value gold">${fmt(totalCA)}</div></div>
+    <div class="stat-card c-red"><div class="stat-label">Attente</div><div class="stat-value red">${pendingCount}</div></div>
+    <div class="stat-card c-green"><div class="stat-label">Dons</div><div class="stat-value green">${fmt(totalDons)}</div></div>
+  </div>`;
+  const filterHTML = `<div class="admin-card"><div class="filter-bar">
+    <select class="f-select-sm" onchange="adminFilter.status=this.value;refreshAdminPanel('orders')">
+      <option value="all">Tous</option><option value="paid">Paye</option><option value="succeeded">Stripe OK</option><option value="pending">Attente</option><option value="failed">Echec</option>
+    </select>
+    <input type="date" class="f-input-search" style="max-width:140px" onchange="adminFilter.dateFrom=this.value;refreshAdminPanel('orders')">
+    <input type="date" class="f-input-search" style="max-width:140px" onchange="adminFilter.dateTo=this.value;refreshAdminPanel('orders')">
+    <button class="btn-sm-s" onclick="ADMIN_LOADED=false;initAdmin();">Reload</button>
+  </div>`;
+  let rowsHTML = '';
+  if(filtered.length === 0){
+    rowsHTML = '<div style="padding:24px;text-align:center;color:var(--gray)">Aucune commande</div>';
+  } else {
+    filtered.forEach(o => {
+      const itemsDetail = o.items.length
+        ? o.items.map(i => '<div style="padding:2px 0">- ' + i.name + ' x' + i.qty + ' = ' + fmt(i.price*i.qty) + '</div>').join('')
+        : '<div style="font-style:italic;color:var(--gray)">Details produits non disponibles</div>';
+      rowsHTML += `<div class="order-row" style="cursor:pointer" onclick="this.querySelector('.order-expand').classList.toggle('show')">
         <div class="order-row-top">
           <span class="order-client">${o.client}</span>
-          <span class="order-total-badge">${o.total}</span>
+          <span class="order-total-badge">${o.total_fmt}</span>
         </div>
         <div class="order-row-bot">
-          <span class="order-id-label">${o.id}</span>
+          <span class="order-id-label">${o.short_id}</span>
           ${psBadge(o.ps)}
-          ${osBadge(o.os)}
-          <span class="order-meta">📅 ${o.delivery}</span>
-          <span class="order-meta">${o.section}</span>
+          <span class="order-meta">${o.payment_method==='on_site'?'Sur place':'Carte'}</span>
+          <span class="order-meta">${o.date}</span>
         </div>
-      </div>`).join('')}
-    </div>
-  </div>`;
+        <div class="order-expand">
+          <div style="padding:10px 0;border-top:1px solid var(--gray-light);font-size:0.82rem;color:#555;">
+            <div>Email: <strong>${o.email}</strong></div>
+            <div>Tel: ${o.phone} | Adresse: ${o.address}</div>
+            <div style="margin-top:8px;font-weight:600;color:var(--navy);">Produits :</div>
+            ${itemsDetail}
+          </div>
+        </div>
+      </div>`;
+    });
+  }
+  return statsHTML + filterHTML + '<div class="order-list">' + rowsHTML + '</div></div>';
+}
+
+function refreshAdminPanel(panel){
+  const isDesktop = window.innerWidth >= 640;
+  const target = isDesktop ? document.getElementById('admin-main') : document.getElementById('admin-content-mobile');
+  if(target) target.innerHTML = buildPanel(panel);
 }
 
 function buildProductsAdmin(){
-  return`<div class="admin-topbar-m">
-    <div><div class="admin-page-title">Produits</div><div class="admin-subtitle">${PRODUCTS.length} produits · ${PRODUCTS.filter(p=>p.active).length} actifs</div></div>
-    <button class="btn-primary" onclick="openModal()">+ Nouveau</button>
-  </div>
-  <div class="admin-card">
-    <div class="order-list">${PRODUCTS.map(p=>`
-      <div class="product-admin-row">
-        <div class="product-admin-row-top">
-          <div>
-            <div class="product-admin-name">${p.emoji} ${p.name}</div>
-            <div class="product-admin-desc">${p.desc}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-weight:700;color:var(--navy);font-size:0.95rem">${fmt(p.price)}</div>
-          </div>
-        </div>
-        <div class="product-admin-row-bot">
-          <span class="badge ${p.stock===0?'b-failed':p.stock<=5?'b-pending':'b-paid'}">${p.stock===0?'Épuisé':p.stock+' unités'}</span>
-          <span class="badge ${p.active?'b-active':'b-inactive'}">${p.active?'Actif':'Inactif'}</span>
-          <button class="btn-sm-p" style="margin-left:auto">Modifier</button>
-        </div>
-      </div>`).join('')}
-    </div>
-  </div>`;
+  let html = `<div class="admin-topbar-m">
+    <div><div class="admin-page-title">Produits</div><div class="admin-subtitle">${PRODUCTS.length} produits</div></div>
+  </div><div class="admin-card"><div class="order-list">`;
+  PRODUCTS.forEach(p => {
+    const stockCls = p.stock===0?'b-failed':p.stock<=5?'b-pending':'b-paid';
+    const stockLbl = p.stock===0?'Epuise':p.stock+' unites';
+    html += `<div class="product-admin-row">
+      <div class="product-admin-row-top">
+        <div><div class="product-admin-name">${p.emoji} ${p.name}</div><div class="product-admin-desc">${p.desc}</div></div>
+        <div style="text-align:right"><div style="font-weight:700;color:var(--navy)">${fmt(p.price)}</div></div>
+      </div>
+      <div class="product-admin-row-bot">
+        <span class="badge ${stockCls}">${stockLbl}</span>
+        <span class="badge ${p.active?'b-active':'b-inactive'}">${p.active?'Actif':'Inactif'}</span>
+      </div>
+    </div>`;
+  });
+  return html + '</div></div>';
 }
 
 function buildDates(){
-  return`<div class="admin-topbar-m">
-    <div><div class="admin-page-title">Dates</div><div class="admin-subtitle">Créneaux de livraison</div></div>
-    <button class="btn-primary">+ Ajouter</button>
-  </div>
-  <div class="admin-card"><div class="order-list">
-    <div class="order-row"><div class="order-row-top"><span class="order-client">09 mars 2025</span><span class="badge b-active">Active</span></div><div class="order-row-bot"><span class="order-meta">Rassemblement FLM – Dimanche</span><span class="order-meta">3 commandes</span><button class="btn-sm-s" style="margin-left:auto">Désactiver</button></div></div>
-    <div class="order-row"><div class="order-row-top"><span class="order-client">23 mars 2025</span><span class="badge b-active">Active</span></div><div class="order-row-bot"><span class="order-meta">Culte communautaire</span><span class="order-meta">2 commandes</span><button class="btn-sm-s" style="margin-left:auto">Désactiver</button></div></div>
-    <div class="order-row"><div class="order-row-top"><span class="order-client">6 avril 2025</span><span class="badge b-pending">En préparation</span></div><div class="order-row-bot"><span class="order-meta">Assemblée générale</span><span class="order-meta">0 commandes</span><button class="btn-sm-s" style="margin-left:auto">Activer</button></div></div>
-  </div></div>`;
+  return `<div class="admin-topbar-m"><div><div class="admin-page-title">Dates</div><div class="admin-subtitle">Creneaux de livraison</div></div></div>
+  <div class="admin-card"><div style="padding:24px;text-align:center;color:var(--gray);">Gestion des dates - a venir</div></div>`;
 }
 
 function buildDonations(){
-  return`<div class="admin-topbar-m">
-    <div><div class="admin-page-title">Dons</div><div class="admin-subtitle">Total : 170 € · ${DONATIONS.length} donateurs</div></div>
-    <button class="btn-outline">⬇ CSV</button>
-  </div>
-  <div class="admin-card"><div class="order-list">${DONATIONS.map(d=>`
-    <div class="order-row">
-      <div class="order-row-top"><span class="order-client">${d.donor}</span><span style="font-weight:700;color:var(--green-light);font-size:0.95rem">${d.amount}</span></div>
-      <div class="order-row-bot"><span class="order-id-label">${d.id}</span><span class="badge b-paid">✓ Reçu</span><span class="order-meta">${d.section}</span><span class="order-meta">${d.date}</span></div>
-    </div>`).join('')}
-  </div></div>`;
+  const totalDons = DONATIONS.reduce((s,d)=>s+(d.total||0),0);
+  let html = `<div class="admin-topbar-m">
+    <div><div class="admin-page-title">Dons</div><div class="admin-subtitle">Total : ${fmt(totalDons)} | ${DONATIONS.length} don(s)</div></div>
+    <button class="btn-outline" onclick="exportCSV('donations')">Export CSV</button>
+  </div><div class="admin-card"><div class="order-list">`;
+  if(DONATIONS.length === 0){
+    html += '<div style="padding:24px;text-align:center;color:var(--gray)">Aucun don enregistre</div>';
+  } else {
+    DONATIONS.forEach(d => {
+      html += `<div class="order-row">
+        <div class="order-row-top"><span class="order-client">${d.client}</span><span style="font-weight:700;color:var(--green-light)">${d.total_fmt}</span></div>
+        <div class="order-row-bot"><span class="order-id-label">${d.short_id}</span>${psBadge(d.ps)}<span class="order-meta">${d.email}</span><span class="order-meta">${d.date}</span></div>
+      </div>`;
+    });
+  }
+  return html + '</div></div>';
 }
 
-/* ===== MODAL ===== */
+function exportCSV(type){
+  let csv = '';
+  if(type==='orders'){
+    csv = 'ID;Date;Client;Email;Telephone;Adresse;Produits;Total;Paiement;Statut\n';
+    ORDERS.forEach(o => {
+      const items = o.items.map(i=>i.name+' x'+i.qty).join(', ') || '-';
+      csv += [o.short_id, o.date, '"'+o.client+'"', o.email, o.phone, '"'+o.address+'"', '"'+items+'"', o.total, o.payment_method, o.ps].join(';') + '\n';
+    });
+  } else {
+    csv = 'ID;Date;Donateur;Email;Montant;Statut\n';
+    DONATIONS.forEach(d => {
+      csv += [d.short_id, d.date, '"'+d.client+'"', d.email, d.total, d.ps].join(';') + '\n';
+    });
+  }
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'vokatra_'+type+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click(); URL.revokeObjectURL(url);
+  showToast('CSV telecharge','t-ok');
+}
+
 function openModal(){document.getElementById('modal-product').classList.add('open');}
 function closeModal(){document.getElementById('modal-product').classList.remove('open');}
 function saveProduct(){closeModal();showToast('✅ Produit enregistré','t-success');}
@@ -1514,6 +1625,7 @@ function handleStripeReturn(){
 
 initApp();
 handleStripeReturn();
+checkAdminAccess();
 </script>
 </body>
 </html>
