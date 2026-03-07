@@ -34,7 +34,7 @@ exports.handler = async (event) => {
 
     if (type === 'orders') {
       const data = await supaFetch('orders',
-        '?select=id,created_at,status,payment_status,payment_method,customer_first_name,customer_last_name,customer_email,customer_phone,customer_address,church_name,section_name,delivery_address,total_amount_cents,stripe_checkout_session_id,admin_notes,order_items(product_name_snapshot,product_emoji_snapshot,qty,line_total_cents)&order=created_at.desc&limit=500'
+        '?select=id,created_at,status,payment_status,payment_method,customer_first_name,customer_last_name,customer_email,customer_phone,customer_address,church_name,section_name,delivery_address,total_amount_cents,stripe_checkout_session_id,admin_notes&order=created_at.desc&limit=500'
       );
       return { statusCode: 200, headers, body: JSON.stringify(data) };
     }
@@ -42,6 +42,15 @@ exports.handler = async (event) => {
     if (type === 'donations') {
       const data = await supaFetch('donations',
         '?select=id,created_at,donor_first_name,donor_last_name,donor_email,donor_phone,church_name,section_name,message,amount_cents,payment_status,stripe_checkout_session_id&order=created_at.desc&limit=500'
+      );
+      return { statusCode: 200, headers, body: JSON.stringify(data) };
+    }
+
+    if (type === 'items') {
+      const order_id = event.queryStringParameters?.order_id;
+      if (!order_id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'order_id requis' }) };
+      const data = await supaFetch('order_items',
+        `?order_id=eq.${order_id}&select=product_name_snapshot,product_emoji_snapshot,qty,line_total_cents`
       );
       return { statusCode: 200, headers, body: JSON.stringify(data) };
     }
