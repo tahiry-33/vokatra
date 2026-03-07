@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOKATRA — Dashboard Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:  #1B3D7A;
+    --gold:  #C9A020;
+    --red:   #B8192A;
+    --green: #2A7A3B;
+    --green-light: #3da050;
+    --bg:    #0f1623;
+    --bg2:   #161e2e;
+    --bg3:   #1e2a40;
+    --border:#2a3a54;
+    --text:  #e8edf5;
+    --muted: #7a8ba8;
+    --font-head: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-body); min-height: 100vh; }
+
+  /* HEADER */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-brand { display: flex; align-items: center; gap: 12px; }
+  .header-logo {
+    width: 36px; height: 36px;
+    background: var(--gold);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .header-title { font-family: var(--font-head); font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px; }
+  .header-sub { font-size: 0.72rem; color: var(--muted); font-family: var(--font-mono); }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .sync-btn {
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 16px; border-radius: 8px;
+    font-family: var(--font-mono); font-size: 0.75rem; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; transition: all .2s;
+  }
+  .sync-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .sync-btn.loading { opacity: 0.6; pointer-events: none; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* TABS */
+  .tabs { padding: 0 32px; background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; gap: 0; }
+  .tab {
+    padding: 14px 20px; font-family: var(--font-mono); font-size: 0.78rem;
+    cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent;
+    transition: all .2s; display: flex; align-items: center; gap: 8px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+  .tab-badge {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 20px; padding: 2px 8px; font-size: 0.68rem;
+    color: var(--muted);
+  }
+  .tab.active .tab-badge { background: rgba(201,160,32,0.15); border-color: rgba(201,160,32,0.3); color: var(--gold); }
+
+  /* MAIN */
+  .main { padding: 28px 32px; max-width: 1400px; }
+
+  /* KPI ROW */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .kpi {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+    position: relative; overflow: hidden;
+  }
+  .kpi::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .kpi.kpi-blue::before { background: var(--navy); }
+  .kpi.kpi-gold::before { background: var(--gold); }
+  .kpi.kpi-green::before { background: var(--green); }
+  .kpi.kpi-red::before { background: var(--red); }
+  .kpi-label { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .kpi-value { font-family: var(--font-head); font-size: 1.8rem; font-weight: 800; line-height: 1; }
+  .kpi-sub { font-size: 0.72rem; color: var(--muted); margin-top: 6px; }
+  .kpi-icon { position: absolute; top: 16px; right: 16px; font-size: 1.4rem; opacity: 0.25; }
+
+  /* FILTERS */
+  .filters { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+  .filter-group { display: flex; gap: 6px; align-items: center; }
+  .filter-label { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
+  .filter-select, .filter-input {
+    background: var(--bg2); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 12px; border-radius: 8px;
+    font-family: var(--font-mono); font-size: 0.75rem;
+    outline: none; transition: border-color .2s;
+  }
+  .filter-select:focus, .filter-input:focus { border-color: var(--gold); }
+  .filter-input { width: 200px; }
+
+  /* TABLE */
+  .table-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .table-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .table-title { font-family: var(--font-head); font-size: 0.9rem; font-weight: 700; }
+  .table-count { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    padding: 11px 16px;
+    font-family: var(--font-mono); font-size: 0.65rem;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); text-align: left;
+    background: var(--bg3); border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid rgba(42,58,84,0.5); transition: background .15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.025); }
+  tbody td { padding: 13px 16px; font-size: 0.82rem; vertical-align: middle; }
+
+  /* BADGES */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 20px;
+    font-family: var(--font-mono); font-size: 0.65rem;
+    font-weight: 500; white-space: nowrap;
+  }
+  .badge-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .badge.paid    { background: rgba(42,122,59,0.2);  color: #5dde7a; border: 1px solid rgba(42,122,59,0.3); }
+  .badge.pending { background: rgba(201,160,32,0.15); color: #f0c040; border: 1px solid rgba(201,160,32,0.3); }
+  .badge.pending .badge-dot { background: #f0c040; }
+  .badge.paid .badge-dot    { background: #5dde7a; }
+  .badge.failed  { background: rgba(184,25,42,0.2);  color: #f07080; border: 1px solid rgba(184,25,42,0.3); }
+  .badge.failed .badge-dot  { background: #f07080; }
+  .badge.unpaid  { background: rgba(120,120,140,0.15); color: #9aa; border: 1px solid rgba(120,120,140,0.2); }
+  .badge.unpaid .badge-dot  { background: #9aa; }
+  .badge.onsite  { background: rgba(27,61,122,0.25); color: #7aadff; border: 1px solid rgba(27,61,122,0.4); }
+  .badge.onsite .badge-dot  { background: #7aadff; }
+  .badge.refunded{ background: rgba(160,100,200,0.15); color: #c090e0; border: 1px solid rgba(160,100,200,0.3);}
+  .badge.refunded .badge-dot{ background: #c090e0; }
+  .badge.stripe  { background: rgba(99,91,255,0.15); color: #a09eff; border: 1px solid rgba(99,91,255,0.2); }
+  .badge.new, .badge.confirmed { background: rgba(201,160,32,0.15); color: #f0c040; border: 1px solid rgba(201,160,32,0.25); }
+  .badge.delivered { background: rgba(42,122,59,0.2); color: #5dde7a; border: 1px solid rgba(42,122,59,0.3); }
+  .badge.cancelled { background: rgba(184,25,42,0.15); color: #f07080; border: 1px solid rgba(184,25,42,0.25); }
+
+  .amount { font-family: var(--font-mono); font-weight: 500; color: var(--text); }
+  .amount.big { color: var(--gold); }
+  .name-cell .full-name { font-weight: 600; }
+  .name-cell .church { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+  .date-cell { font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); }
+  .items-cell { font-size: 0.75rem; color: var(--muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-icon { font-size: 2rem; margin-bottom: 10px; }
+  .empty-txt { font-family: var(--font-mono); font-size: 0.8rem; }
+
+  /* LOADING */
+  .loading-row td { text-align: center; padding: 40px; color: var(--muted); font-family: var(--font-mono); font-size: 0.8rem; }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* PANEL DETAIL */
+  .panel-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200;
+    display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .panel-overlay.open { display: flex; }
+  .panel {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 16px; width: 520px; max-height: 85vh;
+    overflow-y: auto; padding: 28px;
+    animation: slideIn .2s ease;
+  }
+  @keyframes slideIn { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  .panel-close {
+    position: absolute; top: 20px; right: 20px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--muted); width: 32px; height: 32px;
+    border-radius: 8px; cursor: pointer; font-size: 1rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .panel-close:hover { color: var(--text); }
+  .panel-title { font-family: var(--font-head); font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; }
+  .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(42,58,84,0.5); }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-key { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .detail-val { font-size: 0.83rem; text-align: right; max-width: 280px; word-break: break-all; }
+  .items-list { margin-top: 16px; }
+  .item-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg3); border-radius: 8px; margin-bottom: 6px; font-size: 0.8rem; }
+  .item-row .item-name { font-weight: 500; }
+  .item-row .item-price { font-family: var(--font-mono); color: var(--gold); }
+
+  /* STATUS ACTIONS */
+  .status-actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+  .action-btn {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg3); color: var(--text);
+    font-family: var(--font-mono); font-size: 0.72rem; cursor: pointer;
+    transition: all .2s;
+  }
+  .action-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* ERROR */
+  .error-banner { background: rgba(184,25,42,0.15); border: 1px solid rgba(184,25,42,0.3); color: #f07080; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; font-size: 0.82rem; display: none; }
+  .error-banner.show { display: block; }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .main { padding: 16px; }
+    .kpi-row { grid-template-columns: repeat(2,1fr); }
+    .header, .tabs { padding-left: 16px; padding-right: 16px; }
+    .filter-input { width: 140px; }
+  }
+
+  /* SECTION SEPARATOR */
+  .section-sep { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .section-sep-line { flex: 1; height: 1px; background: var(--border); }
+  .section-sep-txt { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+
+  .panel-wrap { position: relative; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-brand">
+    <div class="header-logo">🌿</div>
+    <div>
+      <div class="header-title">VOKATRA</div>
+      <div class="header-sub">FLM Bordeaux · Dashboard Admin</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:0.7rem;color:var(--muted);">
+      <div class="status-dot"></div> Connecté
+    </div>
+    <button class="sync-btn" id="syncBtn" onclick="loadAll()">
+      <span id="syncIcon">↻</span> Actualiser
+    </button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" id="tab-orders" onclick="switchTab('orders')">
+    📦 Commandes <span class="tab-badge" id="badge-orders">—</span>
+  </div>
+  <div class="tab" id="tab-donations" onclick="switchTab('donations')">
+    💝 Dons <span class="tab-badge" id="badge-donations">—</span>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="error-banner" id="errorBanner"></div>
+
+  <!-- SECTION ORDERS -->
+  <div id="section-orders">
+
+    <!-- KPIs -->
+    <div class="kpi-row" id="kpi-row">
+      <div class="kpi kpi-blue">
+        <div class="kpi-label">Total commandes</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-sub">depuis le début</div>
+        <div class="kpi-icon">📦</div>
+      </div>
+      <div class="kpi kpi-green">
+        <div class="kpi-label">Payées (Stripe)</div>
+        <div class="kpi-value" id="kpi-paid">—</div>
+        <div class="kpi-sub" id="kpi-revenue">—</div>
+        <div class="kpi-icon">✅</div>
+      </div>
+      <div class="kpi kpi-gold">
+        <div class="kpi-label">Sur place (en attente)</div>
+        <div class="kpi-value" id="kpi-onsite">—</div>
+        <div class="kpi-sub" id="kpi-onsite-amount">à encaisser</div>
+        <div class="kpi-icon">🤝</div>
+      </div>
+      <div class="kpi kpi-red">
+        <div class="kpi-label">Échouées / Impayées</div>
+        <div class="kpi-value" id="kpi-failed">—</div>
+        <div class="kpi-sub">failed + unpaid</div>
+        <div class="kpi-icon">⚠️</div>
+      </div>
+    </div>
+
+    <!-- FILTERS ORDERS -->
+    <div class="filters">
+      <div class="filter-group">
+        <span class="filter-label">Statut paiement</span>
+        <select class="filter-select" id="filter-payment" onchange="renderOrders()">
+          <option value="">Tous</option>
+          <option value="paid">✅ Payé</option>
+          <option value="pending_onsite">🤝 Sur place</option>
+          <option value="pending">⏳ En attente</option>
+          <option value="unpaid">❌ Impayé</option>
+          <option value="failed">🔴 Échoué</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Statut commande</span>
+        <select class="filter-select" id="filter-status" onchange="renderOrders()">
+          <option value="">Tous</option>
+          <option value="new">Nouveau</option>
+          <option value="confirmed">Confirmé</option>
+          <option value="preparing">En préparation</option>
+          <option value="delivered">Livré</option>
+          <option value="cancelled">Annulé</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <input type="text" class="filter-input" id="filter-search" placeholder="🔍 Nom, église, section..." oninput="renderOrders()">
+      </div>
+    </div>
+
+    <!-- TABLE ORDERS -->
+    <div class="table-wrap">
+      <div class="table-head">
+        <div class="table-title">Commandes</div>
+        <div class="table-count" id="orders-count">—</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Client</th>
+            <th>Section</th>
+            <th>Articles</th>
+            <th>Montant</th>
+            <th>Paiement</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody id="orders-tbody">
+          <tr class="loading-row"><td colspan="6"><span class="spinner"></span>Chargement...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SECTION DONATIONS -->
+  <div id="section-donations" style="display:none">
+
+    <!-- KPIs DON -->
+    <div class="kpi-row">
+      <div class="kpi kpi-blue">
+        <div class="kpi-label">Total dons</div>
+        <div class="kpi-value" id="kpi-don-total">—</div>
+        <div class="kpi-sub">transactions</div>
+        <div class="kpi-icon">💝</div>
+      </div>
+      <div class="kpi kpi-green">
+        <div class="kpi-label">Montant encaissé</div>
+        <div class="kpi-value" id="kpi-don-revenue">—</div>
+        <div class="kpi-sub">dons payés</div>
+        <div class="kpi-icon">✅</div>
+      </div>
+      <div class="kpi kpi-gold">
+        <div class="kpi-label">Donateur·rices</div>
+        <div class="kpi-value" id="kpi-don-donors">—</div>
+        <div class="kpi-sub">uniques</div>
+        <div class="kpi-icon">👥</div>
+      </div>
+      <div class="kpi kpi-red">
+        <div class="kpi-label">Don moyen</div>
+        <div class="kpi-value" id="kpi-don-avg">—</div>
+        <div class="kpi-sub">par transaction payée</div>
+        <div class="kpi-icon">📊</div>
+      </div>
+    </div>
+
+    <!-- FILTERS DON -->
+    <div class="filters">
+      <div class="filter-group">
+        <span class="filter-label">Statut</span>
+        <select class="filter-select" id="filter-don-payment" onchange="renderDonations()">
+          <option value="">Tous</option>
+          <option value="paid">✅ Payé</option>
+          <option value="pending">⏳ En attente</option>
+          <option value="failed">🔴 Échoué</option>
+          <option value="unpaid">❌ Impayé</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <input type="text" class="filter-input" id="filter-don-search" placeholder="🔍 Nom, message..." oninput="renderDonations()">
+      </div>
+    </div>
+
+    <!-- TABLE DONATIONS -->
+    <div class="table-wrap">
+      <div class="table-head">
+        <div class="table-title">Dons reçus</div>
+        <div class="table-count" id="donations-count">—</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Donateur·rice</th>
+            <th>Église / Section</th>
+            <th>Montant</th>
+            <th>Statut</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody id="donations-tbody">
+          <tr class="loading-row"><td colspan="6"><span class="spinner"></span>Chargement...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div class="panel-overlay" id="panel-overlay" onclick="closePanel(event)">
+  <div class="panel panel-wrap" id="panel">
+    <button class="panel-close" onclick="closePanel()">✕</button>
+    <div id="panel-content"></div>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'https://vokatra-flm.netlify.app/.netlify/functions/admin-data';
+let ADMIN_TOKEN = sessionStorage.getItem('vokatra_token') || '';
+
+let allOrders = [];
+let allOrderItems = {};
+let allDonations = [];
+let currentTab = 'orders';
+
+async function apiFetch(type) {
+  const url = `${API_BASE}?type=${type}&token=${encodeURIComponent(ADMIN_TOKEN)}`;
+  const r = await fetch(url);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.error || r.statusText);
+  }
+  return r.json();
+}
+
+function fmt(cents) {
+  if (!cents && cents !== 0) return '—';
+  return (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+    + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function payBadge(status) {
+  const map = {
+    'paid':          ['paid',    '✅', 'Payé'],
+    'pending':       ['pending', '⏳', 'En attente'],
+    'pending_onsite':['onsite',  '🤝', 'Sur place'],
+    'unpaid':        ['unpaid',  '—',  'Impayé'],
+    'failed':        ['failed',  '❌', 'Échoué'],
+    'refunded':      ['refunded','↩️', 'Remboursé'],
+  };
+  const [cls, icon, label] = map[status] || ['unpaid', '?', status];
+  return `<span class="badge ${cls}"><span class="badge-dot"></span>${icon} ${label}</span>`;
+}
+
+function statusBadge(status) {
+  const map = {
+    'new':        ['new',       '🆕', 'Nouveau'],
+    'confirmed':  ['confirmed', '👍', 'Confirmé'],
+    'preparing':  ['new',       '🔧', 'En préparation'],
+    'delivered':  ['delivered', '🎉', 'Livré'],
+    'cancelled':  ['cancelled', '🚫', 'Annulé'],
+  };
+  const [cls, icon, label] = map[status] || ['new', '?', status];
+  return `<span class="badge ${cls}">${icon} ${label}</span>`;
+}
+
+function methodBadge(method) {
+  if (method === 'stripe') return `<span class="badge stripe">💳 Stripe</span>`;
+  if (method === 'onsite') return `<span class="badge onsite">🤝 Sur place</span>`;
+  return `<span class="badge unpaid">${method}</span>`;
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBanner');
+  el.textContent = '⚠️ ' + msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 6000);
+}
+
+async function loadAll() {
+  const btn = document.getElementById('syncBtn');
+  const icon = document.getElementById('syncIcon');
+  btn.classList.add('loading');
+  icon.style.animation = 'spin 0.7s linear infinite';
+
+  try {
+    // 2 requests via Netlify Function (service_role key côté serveur)
+    const [orders, donations] = await Promise.all([
+      apiFetch('orders'),
+      apiFetch('donations'),
+    ]);
+
+    allOrders = orders;
+    allDonations = donations;
+
+    // Items embedded in each order
+    allOrderItems = {};
+    for (const o of orders) {
+      allOrderItems[o.id] = o.order_items || [];
+    }
+
+    updateBadges();
+    computeOrderKPIs();
+    computeDonationKPIs();
+    renderOrders();
+    renderDonations();
+  } catch (e) {
+    showError('Erreur de connexion Supabase : ' + e.message);
+    console.error(e);
+  } finally {
+    btn.classList.remove('loading');
+    icon.style.animation = '';
+  }
+}
+
+function updateBadges() {
+  document.getElementById('badge-orders').textContent = allOrders.length;
+  document.getElementById('badge-donations').textContent = allDonations.length;
+}
+
+function computeOrderKPIs() {
+  const total = allOrders.length;
+  const paid = allOrders.filter(o => o.payment_status === 'paid');
+  const onsite = allOrders.filter(o => o.payment_status === 'pending_onsite');
+  const failed = allOrders.filter(o => ['failed','unpaid'].includes(o.payment_status));
+  const revenue = paid.reduce((s, o) => s + (o.total_amount_cents || 0), 0);
+  const onsiteAmt = onsite.reduce((s, o) => s + (o.total_amount_cents || 0), 0);
+
+  document.getElementById('kpi-total').textContent = total;
+  document.getElementById('kpi-paid').textContent = paid.length;
+  document.getElementById('kpi-revenue').textContent = fmt(revenue) + ' encaissés';
+  document.getElementById('kpi-onsite').textContent = onsite.length;
+  document.getElementById('kpi-onsite-amount').textContent = fmt(onsiteAmt) + ' à encaisser';
+  document.getElementById('kpi-failed').textContent = failed.length;
+}
+
+function computeDonationKPIs() {
+  const paid = allDonations.filter(d => d.payment_status === 'paid');
+  const revenue = paid.reduce((s, d) => s + (d.amount_cents || 0), 0);
+  const donors = new Set(paid.map(d => d.donor_first_name + d.donor_last_name)).size;
+  const avg = paid.length ? Math.round(revenue / paid.length) : 0;
+
+  document.getElementById('kpi-don-total').textContent = allDonations.length;
+  document.getElementById('kpi-don-revenue').textContent = fmt(revenue);
+  document.getElementById('kpi-don-donors').textContent = donors;
+  document.getElementById('kpi-don-avg').textContent = fmt(avg);
+}
+
+function filterOrders() {
+  const payFilter = document.getElementById('filter-payment').value;
+  const statusFilter = document.getElementById('filter-status').value;
+  const search = document.getElementById('filter-search').value.toLowerCase();
+
+  return allOrders.filter(o => {
+    if (payFilter && o.payment_status !== payFilter) return false;
+    if (statusFilter && o.status !== statusFilter) return false;
+    if (search) {
+      const hay = [o.customer_first_name, o.customer_last_name, o.church_name, o.section_name, o.customer_email, o.customer_phone].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function renderOrders() {
+  const filtered = filterOrders();
+  document.getElementById('orders-count').textContent = filtered.length + ' commande' + (filtered.length > 1 ? 's' : '');
+  const tbody = document.getElementById('orders-tbody');
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="empty-icon">📭</div><div class="empty-txt">Aucune commande trouvée</div></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(o => {
+    return `<tr onclick="showOrder('${o.id}')" style="cursor:pointer">
+      <td class="date-cell">${fmtDate(o.created_at)}</td>
+      <td><div class="name-cell">
+        <div class="full-name">${o.customer_first_name} ${o.customer_last_name}</div>
+        <div class="church">${o.church_name || ''}</div>
+      </div></td>
+      <td><span style="font-size:0.78rem;color:var(--muted)">${o.section_name || '—'}</span></td>
+      <td><span class="amount ${o.payment_status === 'paid' ? 'big' : ''}">${fmt(o.total_amount_cents)}</span></td>
+      <td>${payBadge(o.payment_status)}</td>
+      <td>${statusBadge(o.status)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterDonations() {
+  const payFilter = document.getElementById('filter-don-payment').value;
+  const search = document.getElementById('filter-don-search').value.toLowerCase();
+
+  return allDonations.filter(d => {
+    if (payFilter && d.payment_status !== payFilter) return false;
+    if (search) {
+      const hay = [d.donor_first_name, d.donor_last_name, d.church_name, d.section_name, d.message, d.donor_email].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function renderDonations() {
+  const filtered = filterDonations();
+  document.getElementById('donations-count').textContent = filtered.length + ' don' + (filtered.length > 1 ? 's' : '');
+  const tbody = document.getElementById('donations-tbody');
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="empty-icon">💝</div><div class="empty-txt">Aucun don trouvé</div></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(d => `<tr onclick="showDonation('${d.id}')" style="cursor:pointer">
+    <td class="date-cell">${fmtDate(d.created_at)}</td>
+    <td><div class="name-cell">
+      <div class="full-name">${d.donor_first_name} ${d.donor_last_name}</div>
+      <div class="church">${d.donor_email || d.donor_phone || ''}</div>
+    </div></td>
+    <td><span style="font-size:0.78rem;color:var(--muted)">${[d.church_name, d.section_name].filter(Boolean).join(' · ') || '—'}</span></td>
+    <td><span class="amount ${d.payment_status === 'paid' ? 'big' : ''}">${fmt(d.amount_cents)}</span></td>
+    <td>${payBadge(d.payment_status)}</td>
+    <td style="font-size:0.75rem;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.message || '—'}</td>
+  </tr>`).join('');
+}
+
+async function showOrder(id) {
+  const o = allOrders.find(x => x.id === id);
+  if (!o) return;
+  // Charger les articles si pas encore en cache
+  if (!allOrderItems[id]) {
+    try {
+      const url = `${API_BASE}?type=items&order_id=${id}&token=${encodeURIComponent(ADMIN_TOKEN)}`;
+      const r = await fetch(url);
+      allOrderItems[id] = r.ok ? await r.json() : [];
+    } catch(e) { allOrderItems[id] = []; }
+  }
+  const items = allOrderItems[id] || [];
+
+  document.getElementById('panel-content').innerHTML = `
+    <div class="panel-title">📦 Détail commande</div>
+    ${[
+      ['ID', `<span style="font-family:var(--font-mono);font-size:0.7rem">${o.id}</span>`],
+      ['Date', fmtDate(o.created_at)],
+      ['Client', `${o.customer_first_name} ${o.customer_last_name}`],
+      ['Email', o.customer_email || '—'],
+      ['Téléphone', o.customer_phone || '—'],
+      ['Adresse', o.customer_address || '—'],
+      ['Église', o.church_name || '—'],
+      ['Section', o.section_name || '—'],
+      ['Livraison', o.delivery_address || '—'],
+      ['Statut commande', statusBadge(o.status)],
+      ['Paiement', payBadge(o.payment_status)],
+      ['Mode paiement', methodBadge(o.payment_method)],
+      ['Total', `<span class="amount big" style="font-size:1rem">${fmt(o.total_amount_cents)}</span>`],
+      o.stripe_checkout_session_id ? ['Session Stripe', `<span style="font-family:var(--font-mono);font-size:0.68rem">${o.stripe_checkout_session_id}</span>`] : null,
+      o.admin_notes ? ['Notes admin', o.admin_notes] : null,
+    ].filter(Boolean).map(([k,v]) => `
+      <div class="detail-row">
+        <span class="detail-key">${k}</span>
+        <span class="detail-val">${v}</span>
+      </div>`).join('')}
+
+    ${items.length ? `
+    <div style="margin-top:20px">
+      <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">Articles commandés</div>
+      <div class="items-list">
+        ${items.map(i => `
+          <div class="item-row">
+            <span class="item-name">${i.product_emoji_snapshot || '📦'} ${i.product_name_snapshot} × ${i.qty}</span>
+            <span class="item-price">${fmt(i.line_total_cents)}</span>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
+  `;
+  document.getElementById('panel-overlay').classList.add('open');
+}
+
+function showDonation(id) {
+  const d = allDonations.find(x => x.id === id);
+  if (!d) return;
+
+  document.getElementById('panel-content').innerHTML = `
+    <div class="panel-title">💝 Détail don</div>
+    ${[
+      ['ID', `<span style="font-family:var(--font-mono);font-size:0.7rem">${d.id}</span>`],
+      ['Date', fmtDate(d.created_at)],
+      ['Donateur·rice', `${d.donor_first_name} ${d.donor_last_name}`],
+      ['Email', d.donor_email || '—'],
+      ['Téléphone', d.donor_phone || '—'],
+      ['Église', d.church_name || '—'],
+      ['Section', d.section_name || '—'],
+      ['Montant', `<span class="amount big" style="font-size:1.1rem">${fmt(d.amount_cents)}</span>`],
+      ['Statut', payBadge(d.payment_status)],
+      d.message ? ['Message', `<em style="color:var(--muted)">"${d.message}"</em>`] : null,
+      d.stripe_checkout_session_id ? ['Session Stripe', `<span style="font-family:var(--font-mono);font-size:0.68rem">${d.stripe_checkout_session_id}</span>`] : null,
+    ].filter(Boolean).map(([k,v]) => `
+      <div class="detail-row">
+        <span class="detail-key">${k}</span>
+        <span class="detail-val">${v}</span>
+      </div>`).join('')}
+  `;
+  document.getElementById('panel-overlay').classList.add('open');
+}
+
+function closePanel(e) {
+  if (e && e.target !== document.getElementById('panel-overlay')) return;
+  document.getElementById('panel-overlay').classList.remove('open');
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('section-orders').style.display = tab === 'orders' ? '' : 'none';
+  document.getElementById('section-donations').style.display = tab === 'donations' ? '' : 'none';
+  document.getElementById('tab-orders').classList.toggle('active', tab === 'orders');
+  document.getElementById('tab-donations').classList.toggle('active', tab === 'donations');
+}
+
+// loadAll déclenché depuis l'écran de login
+
+// Keyboard shortcut
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('panel-overlay').classList.remove('open');
+  if (e.key === 'r' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); loadAll(); }
+});
+</script>
+
+
+</body>
+</html>
