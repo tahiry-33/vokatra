@@ -18,14 +18,15 @@ exports.handler = async (event) => {
   const headers = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, x-admin-token',
+    'Access-Control-Allow-Headers': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
   };
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
-  const token = event.headers['x-admin-token'];
+  const token = event.queryStringParameters?.token || event.headers['x-admin-token'];
   if (ADMIN_TOKEN && token !== ADMIN_TOKEN) {
-    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Non autorisé' }) };
+    return { statusCode: 401, headers, body: JSON.stringify({ error: 'Non autorise' }) };
   }
 
   try {
