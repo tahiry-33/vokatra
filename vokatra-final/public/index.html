@@ -1906,11 +1906,12 @@ async function doPayment() {
 
     const orderId = result.order_id;
 
-    /* Enrichir la commande avec la date de livraison et l'église */
-    await sb.from('orders').update({
-      delivery_date_id: deliveryDateId,
-      church_name: CHURCH_NAME
-    }).eq('id', orderId);
+    /* Enrichir la commande avec le libellé de la date de livraison (colonne "delivery_date" TEXT) */
+    if (deliveryLabel) {
+      await sb.from('orders').update({
+        delivery_date: deliveryLabel
+      }).eq('id', orderId);
+    }
 
     /* Étape 2a : Paiement en espèces → on affiche la confirmation */
     if (payMethod !== 'card') {
@@ -2026,8 +2027,7 @@ async function doDon() {
         donor_email: null,
         amount_cents: Math.round(donAmt * 100),
         currency: 'EUR',
-        payment_status: 'pending',
-        church_name: CHURCH_NAME
+        payment_status: 'pending'
       })
       .select('id')
       .single();
@@ -2120,7 +2120,7 @@ async function loadAdminData() {
         const rIt = await fetch(`/.netlify/functions/admin-data?token=${encodeURIComponent(ADMIN_TOKEN_CURRENT)}&type=items&order_id=${o.id}`);
         if (rIt.ok) items = await rIt.json();
       } catch { }
-      const deliveryDate = DELIVERY_DATES.find(d => d.id === o.delivery_date_id);
+      const deliveryDate = o.delivery_date || null;
       return {
         id: o.id,
         short_id: '#VKF-' + (o.id || '').toString().slice(0, 6).toUpperCase(),
@@ -2129,7 +2129,7 @@ async function loadAdminData() {
         email: o.email || '—',
         phone: o.phone || '—',
         address: o.address || '—',
-        delivery_date: deliveryDate ? deliveryDate.label : (o.delivery_address || '—'),
+        delivery_date: deliveryDate || '—',
         total: (o.total_cents || 0) / 100,
         total_fmt: fmt((o.total_cents || 0) / 100),
         payment_method: o.payment_method || '—',
