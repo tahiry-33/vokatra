@@ -1,248 +1,144 @@
 // ============================================================
-//  VOKATRA – Netlify Function
+//  VOKATRA FIFIL — Netlify Function
 //  create_checkout_session.js
 //
-//  Rôle : reçoit le panier + infos client du front,
-//         valide tout côté serveur,
-//         crée la commande en DB,
-//         génère une session Stripe Checkout,
-//         retourne l'URL de paiement.
+//  Rôle : reçoit un order_id (commande déjà créée via RPC place_order)
+//         OU un donation_id (don déjà inséré en DB).
+//         Crée la session Stripe Checkout correspondante
+//         et renvoie l'URL de paiement.
 // ============================================================
 
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 
-// ── Clients ──────────────────────────────────────────────────
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY // bypass RLS — sécurisé côté serveur uniquement
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+const SITE_URL = process.env.SITE_URL || 'https://vokatra-fifil.netlify.app';
 
 // ── Handler principal ─────────────────────────────────────────
 exports.handler = async (event) => {
 
-  // 1. Méthode POST uniquement
+  // CORS preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS'
+      },
+      body: ''
+    };
+  }
+
   if (event.httpMethod !== 'POST') {
-    return response(405, { error: 'Method not allowed' });
+    return json(405, { error: 'Method not allowed' });
   }
 
   let body;
-  try {
-    body = JSON.parse(event.body);
-  } catch {
-    return response(400, { error: 'Corps de requête invalide (JSON attendu)' });
+  try { body = JSON.parse(event.body); }
+  catch { return json(400, { error: 'Corps JSON invalide' }); }
+
+  // ─────────────────────────────────────────────
+  // Type DON
+  // ─────────────────────────────────────────────
+  if (body.type === 'donation' || body.donation_id) {
+    return await handleDonation(body);
   }
 
-  const { cart, customer, delivery, donation } = body;
-
-  // ────────────────────────────────────────────────────────────
-  // CAS 1 : DON
-  // ────────────────────────────────────────────────────────────
-  if (donation) {
-    return await handleDonation(donation);
-  }
-
-  // ────────────────────────────────────────────────────────────
-  // CAS 2 : COMMANDE
-  // ────────────────────────────────────────────────────────────
-  return await handleOrder(cart, customer, delivery);
+  // ─────────────────────────────────────────────
+  // Type COMMANDE
+  // ─────────────────────────────────────────────
+  return await handleOrder(body);
 };
 
 
 // ============================================================
 //  COMMANDE
 // ============================================================
-async function handleOrder(cart, customer, delivery) {
+async function handleOrder({ order_id, church_name }) {
+  if (!order_id) return json(400, { error: 'order_id manquant' });
 
-  // ── Validation des champs obligatoires ──────────────────────
-  const required = [
-    'firstName', 'lastName', 'address',
-    'churchName', 'sectionName',
-    'deliveryAddress', 'deliveryDateId'
-  ];
-  for (const field of required) {
-    if (!customer?.[field] && !delivery?.[field]) {
-      const val = customer?.[field] ?? delivery?.[field.replace('delivery', '').toLowerCase()];
-      if (!val) {
-        // vérification combinée
-      }
-    }
-  }
-  if (!customer?.firstName)      return response(400, { error: 'Prénom obligatoire' });
-  if (!customer?.lastName)       return response(400, { error: 'Nom obligatoire' });
-  if (!customer?.address)        return response(400, { error: 'Adresse obligatoire' });
-  if (!customer?.churchName)     return response(400, { error: 'Nom d\'église obligatoire' });
-  if (!customer?.sectionName)    return response(400, { error: 'Section obligatoire' });
-  if (!delivery?.address)        return response(400, { error: 'Adresse de livraison obligatoire' });
-  if (!delivery?.dateId)         return response(400, { error: 'Date de livraison obligatoire' });
-  if (!cart || !cart.length)     return response(400, { error: 'Panier vide' });
-
-  // ── Validation de la date de livraison ──────────────────────
-  const { data: deliveryDate, error: dateError } = await supabase
-    .from('delivery_dates')
-    .select('id, delivery_date, label, active')
-    .eq('id', delivery.dateId)
-    .single();
-
-  if (dateError || !deliveryDate) {
-    return response(400, { error: 'Date de livraison introuvable' });
-  }
-  if (!deliveryDate.active) {
-    return response(400, { error: 'Cette date de livraison n\'est plus disponible' });
-  }
-
-  // ── Validation des produits (prix + stock côté serveur) ──────
-  const productIds = cart.map(item => item.productId);
-
-  const { data: products, error: productsError } = await supabase
-    .from('products')
-    .select('id, name, unit_price_cents, stock_qty, active, emoji')
-    .in('id', productIds);
-
-  if (productsError) {
-    return response(500, { error: 'Erreur lors de la récupération des produits' });
-  }
-
-  // Construire les lignes de commande validées
-  const orderItems = [];
-  const stripeLineItems = [];
-  let totalCents = 0;
-
-  for (const cartItem of cart) {
-    const product = products.find(p => p.id === cartItem.productId);
-
-    if (!product) {
-      return response(400, { error: `Produit introuvable : ${cartItem.productId}` });
-    }
-    if (!product.active) {
-      return response(400, { error: `Produit non disponible : ${product.name}` });
-    }
-    if (product.stock_qty < cartItem.qty) {
-      return response(400, {
-        error: `Stock insuffisant pour "${product.name}". Disponible : ${product.stock_qty}, demandé : ${cartItem.qty}`
-      });
-    }
-    if (cartItem.qty <= 0) {
-      return response(400, { error: `Quantité invalide pour : ${product.name}` });
-    }
-
-    const lineTotalCents = product.unit_price_cents * cartItem.qty;
-    totalCents += lineTotalCents;
-
-    orderItems.push({
-      product_id:                 product.id,
-      product_name_snapshot:      product.name,
-      product_emoji_snapshot:     product.emoji,
-      unit_price_cents_snapshot:  product.unit_price_cents,
-      qty:                        cartItem.qty,
-      line_total_cents:           lineTotalCents,
-    });
-
-    stripeLineItems.push({
-      price_data: {
-        currency:     'eur',
-        unit_amount:  product.unit_price_cents,
-        product_data: {
-          name:        product.name,
-          description: `${product.emoji} Projet VOKATRA – FLM Bordeaux`,
-        },
-      },
-      quantity: cartItem.qty,
-    });
-  }
-
-  // ── Créer la commande en DB (payment_status = pending) ──────
-  const { data: order, error: orderError } = await supabase
+  // Récupérer la commande
+  const { data: order, error: orderErr } = await supabase
     .from('orders')
-    .insert({
-      status:               'new',
-      payment_status:       'pending',
-      payment_method:       'stripe',
-
-      customer_first_name:  customer.firstName,
-      customer_last_name:   customer.lastName,
-      customer_address:     customer.address,
-      customer_phone:       customer.phone   || null,
-      customer_email:       customer.email   || null,
-
-      church_name:          customer.churchName,
-      section_name:         customer.sectionName,
-
-      delivery_address:     delivery.address,
-      delivery_date_id:     delivery.dateId,
-
-      currency:             'EUR',
-      total_amount_cents:   totalCents,
-    })
-    .select('id')
+    .select('id, first_name, last_name, email, total_cents, payment_status, payment_method')
+    .eq('id', order_id)
     .single();
 
-  if (orderError) {
-    console.error('Erreur création commande:', orderError);
-    return response(500, { error: 'Erreur lors de la création de la commande' });
+  if (orderErr || !order) {
+    console.error('Order introuvable:', orderErr);
+    return json(404, { error: 'Commande introuvable' });
   }
 
-  // ── Créer les lignes de commande ────────────────────────────
-  const itemsWithOrderId = orderItems.map(item => ({
-    ...item,
-    order_id: order.id,
+  if (order.payment_status === 'paid') {
+    return json(400, { error: 'Commande déjà payée' });
+  }
+
+  if (order.payment_method !== 'stripe') {
+    return json(400, { error: 'Cette commande n\'est pas en mode Stripe' });
+  }
+
+  // Récupérer les items
+  const { data: items, error: itemsErr } = await supabase
+    .from('order_items')
+    .select('product_name, product_id, quantity, unit_price_cents')
+    .eq('order_id', order_id);
+
+  if (itemsErr || !items || !items.length) {
+    console.error('Items introuvables:', itemsErr);
+    return json(404, { error: 'Articles de la commande introuvables' });
+  }
+
+  // Construire les line_items Stripe
+  const churchLabel = church_name || 'FIFIL Fileovana Paris';
+  const lineItems = items.map(it => ({
+    price_data: {
+      currency: 'eur',
+      unit_amount: it.unit_price_cents,
+      product_data: {
+        name: it.product_name,
+        description: `Projet Vokatra — ${churchLabel}`
+      }
+    },
+    quantity: it.quantity
   }));
 
-  const { error: itemsError } = await supabase
-    .from('order_items')
-    .insert(itemsWithOrderId);
-
-  if (itemsError) {
-    console.error('Erreur création order_items:', itemsError);
-    // Annuler la commande orpheline
-    await supabase.from('orders').delete().eq('id', order.id);
-    return response(500, { error: 'Erreur lors de l\'enregistrement des articles' });
-  }
-
-  // ── Créer la session Stripe Checkout ────────────────────────
+  // Créer la session Stripe
   let session;
   try {
     session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      mode:                 'payment',
-      line_items:           stripeLineItems,
-
-      // Métadonnées pour le webhook
+      mode: 'payment',
+      line_items: lineItems,
+      customer_email: order.email || undefined,
       metadata: {
         order_id: order.id,
-        type:     'order',
+        type: 'order'
       },
-
-      customer_email: customer.email || undefined,
-
-      success_url: `${process.env.SITE_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${process.env.SITE_URL}/cancel`,
-
-      // Expiration : 30 minutes
-      expires_at: Math.floor(Date.now() / 1000) + 1800,
+      success_url: `${SITE_URL}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${SITE_URL}/?payment=cancelled`,
+      expires_at: Math.floor(Date.now() / 1000) + 1800 // 30 min
     });
-  } catch (stripeError) {
-    console.error('Erreur Stripe:', stripeError);
-    // Mettre la commande en failed
-    await supabase
-      .from('orders')
-      .update({ payment_status: 'failed' })
-      .eq('id', order.id);
-    return response(500, { error: 'Erreur lors de la création du paiement Stripe' });
+  } catch (stripeErr) {
+    console.error('Erreur Stripe:', stripeErr);
+    await supabase.from('orders').update({ payment_status: 'failed' }).eq('id', order.id);
+    return json(500, { error: 'Erreur lors de la création du paiement' });
   }
 
-  // ── Enregistrer l'ID de session Stripe ──────────────────────
+  // Enregistrer l'ID de session Stripe dans la commande
   await supabase
     .from('orders')
     .update({ stripe_checkout_session_id: session.id })
     .eq('id', order.id);
 
-  // ── Retourner l'URL de paiement ─────────────────────────────
-  return response(200, {
-    url:      session.url,
-    order_id: order.id,
+  return json(200, {
+    checkout_url: session.url,
+    order_id: order.id
   });
 }
 
@@ -250,90 +146,80 @@ async function handleOrder(cart, customer, delivery) {
 // ============================================================
 //  DON
 // ============================================================
-async function handleDonation(donation) {
+async function handleDonation({ donation_id, amount_cents, church_name }) {
+  if (!donation_id) return json(400, { error: 'donation_id manquant' });
+  if (!amount_cents || amount_cents < 100) return json(400, { error: 'Montant invalide' });
 
-  // Validation
-  if (!donation.firstName)  return response(400, { error: 'Prénom obligatoire' });
-  if (!donation.lastName)   return response(400, { error: 'Nom obligatoire' });
-  if (!donation.amountCents || donation.amountCents < 100) {
-    return response(400, { error: 'Montant minimum : 1 €' });
-  }
-
-  // Créer le don en DB
-  const { data: don, error: donError } = await supabase
+  // Récupérer le don
+  const { data: don, error: donErr } = await supabase
     .from('donations')
-    .insert({
-      donor_first_name: donation.firstName,
-      donor_last_name:  donation.lastName,
-      donor_email:      donation.email    || null,
-      donor_phone:      donation.phone    || null,
-      church_name:      donation.church   || null,
-      section_name:     donation.section  || null,
-      message:          donation.message  || null,
-      amount_cents:     donation.amountCents,
-      currency:         'EUR',
-      payment_status:   'pending',
-    })
-    .select('id')
+    .select('id, donor_first_name, donor_last_name, donor_email, amount_cents, payment_status')
+    .eq('id', donation_id)
     .single();
 
-  if (donError) {
-    console.error('Erreur création don:', donError);
-    return response(500, { error: 'Erreur lors de la création du don' });
+  if (donErr || !don) {
+    console.error('Don introuvable:', donErr);
+    return json(404, { error: 'Don introuvable' });
   }
 
-  // Créer la session Stripe
+  if (don.payment_status === 'paid') {
+    return json(400, { error: 'Don déjà payé' });
+  }
+
+  const churchLabel = church_name || 'FIFIL Fileovana Paris';
+
+  // Créer la session Stripe pour don
   let session;
   try {
     session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      mode:                 'payment',
+      mode: 'payment',
       line_items: [{
         price_data: {
-          currency:    'eur',
-          unit_amount: donation.amountCents,
+          currency: 'eur',
+          unit_amount: don.amount_cents || amount_cents,
           product_data: {
-            name:        `Don – Projet VOKATRA`,
-            description: `FLM Bordeaux · Merci pour votre soutien 🙏`,
-          },
+            name: `Don — Projet Vokatra`,
+            description: `${churchLabel} · Merci pour votre soutien 🙏`
+          }
         },
-        quantity: 1,
+        quantity: 1
       }],
+      customer_email: don.donor_email || undefined,
       metadata: {
         donation_id: don.id,
-        type:        'donation',
+        type: 'donation'
       },
-      customer_email: donation.email || undefined,
-      success_url: `${process.env.SITE_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${process.env.SITE_URL}/cancel`,
+      success_url: `${SITE_URL}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${SITE_URL}/?payment=cancelled`,
+      expires_at: Math.floor(Date.now() / 1000) + 1800
     });
-  } catch (stripeError) {
-    console.error('Erreur Stripe don:', stripeError);
-    await supabase.from('donations').delete().eq('id', don.id);
-    return response(500, { error: 'Erreur Stripe' });
+  } catch (stripeErr) {
+    console.error('Erreur Stripe don:', stripeErr);
+    await supabase.from('donations').update({ payment_status: 'failed' }).eq('id', don.id);
+    return json(500, { error: 'Erreur Stripe' });
   }
 
-  // Enregistrer l'ID de session
   await supabase
     .from('donations')
     .update({ stripe_checkout_session_id: session.id })
     .eq('id', don.id);
 
-  return response(200, {
-    url:         session.url,
-    donation_id: don.id,
+  return json(200, {
+    checkout_url: session.url,
+    donation_id: don.id
   });
 }
 
 
 // ── Helpers ───────────────────────────────────────────────────
-function response(statusCode, body) {
+function json(statusCode, body) {
   return {
     statusCode,
     headers: {
-      'Content-Type':                'application/json',
-      'Access-Control-Allow-Origin': '*',
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body)
   };
 }
