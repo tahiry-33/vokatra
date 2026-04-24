@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#2D4A3E">
-<title>Vokatra — FIFIL Fileovana Paris</title>
+<title>Hetsika — FIFIL Fileovana Paris</title>
 <meta name="description" content="Commandez Godrogodro et Cake. Livraison samedi 9 ou dimanche 10 mai 2026. Paiement en ligne ou en espèces.">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1272,7 +1272,7 @@ a { color: var(--forest); text-decoration: none; }
     <div class="brand" onclick="showView('v-store')">
       <div class="brand-logo">FF</div>
       <div class="brand-text">
-        <div class="brand-name">Vokatra</div>
+        <div class="brand-name">Hetsika</div>
         <div class="brand-sub">FIFIL Fileovana Paris</div>
       </div>
     </div>
@@ -1293,7 +1293,7 @@ a { color: var(--forest); text-decoration: none; }
   <section class="hero">
     <div class="hero-inner">
       <div class="hero-eyebrow">Édition mai 2026 · Paris</div>
-      <h1>Vokatra<br><em>faits maison</em></h1>
+      <h1>Hetsika<br><em>faits maison</em></h1>
       <p>Commandez nos Godrogodro et Cake préparés avec soin par la communauté — et soutenez les activités de FIFIL Fileovana Paris.</p>
       <div class="hero-dates">
         <div class="date-chip">
@@ -1397,7 +1397,7 @@ a { color: var(--forest); text-decoration: none; }
     <div class="brand" onclick="showView('v-store')">
       <div class="brand-logo">FF</div>
       <div class="brand-text">
-        <div class="brand-name">Vokatra</div>
+        <div class="brand-name">Hetsika</div>
         <div class="brand-sub">Commande</div>
       </div>
     </div>
@@ -1506,7 +1506,7 @@ a { color: var(--forest); text-decoration: none; }
     <div class="brand" onclick="showView('v-store')">
       <div class="brand-logo">FF</div>
       <div class="brand-text">
-        <div class="brand-name">Vokatra</div>
+        <div class="brand-name">Hetsika</div>
         <div class="brand-sub">Confirmation</div>
       </div>
     </div>
@@ -1522,7 +1522,7 @@ a { color: var(--forest); text-decoration: none; }
     <div class="brand" onclick="showView('v-store')">
       <div class="brand-logo">FF</div>
       <div class="brand-text">
-        <div class="brand-name">Vokatra</div>
+        <div class="brand-name">Hetsika</div>
         <div class="brand-sub">Faire un don</div>
       </div>
     </div>
@@ -1565,7 +1565,7 @@ a { color: var(--forest); text-decoration: none; }
 <div class="view" id="v-admin-login">
   <div class="login-wrap">
     <div class="brand-logo" style="margin:0 auto 20px;width:64px;height:64px;font-size:24px">FF</div>
-    <h1 class="checkout-title" style="font-size:1.75rem;margin-bottom:6px">Vokatra&nbsp;— Admin</h1>
+    <h1 class="checkout-title" style="font-size:1.75rem;margin-bottom:6px">Hetsika&nbsp;— Admin</h1>
     <p class="checkout-subtitle" style="margin-bottom:22px">FIFIL Fileovana Paris · Gestion</p>
     <div class="form-group">
       <label class="form-label" for="admin-pw">Mot de passe admin</label>
@@ -1584,7 +1584,7 @@ a { color: var(--forest); text-decoration: none; }
       <div class="brand-logo">FF</div>
       <div class="brand-text">
         <div class="brand-name">Admin</div>
-        <div class="brand-sub">Vokatra FIFIL</div>
+        <div class="brand-sub">Hetsika FIFIL</div>
       </div>
     </div>
     <button class="btn-secondary" onclick="showView('v-store')">← Retour</button>
@@ -1621,7 +1621,7 @@ a { color: var(--forest); text-decoration: none; }
 
 <script>
 /* =====================================================
-   VOKATRA FIFIL FILEOVANA PARIS — Production
+   HETSIKA FIFIL FILEOVANA PARIS — Production
    Branché sur Supabase (projet vokatra-fifil)
 ===================================================== */
 
@@ -2123,7 +2123,7 @@ async function loadAdminData() {
       const deliveryDate = o.delivery_date || null;
       return {
         id: o.id,
-        short_id: '#VKF-' + (o.id || '').toString().slice(0, 6).toUpperCase(),
+        short_id: '#HET-' + (o.id || '').toString().slice(0, 6).toUpperCase(),
         date: new Date(o.created_at).toLocaleDateString('fr-FR'),
         client: ((o.first_name || '') + ' ' + (o.last_name || '')).trim() || '—',
         email: o.email || '—',
@@ -2145,7 +2145,7 @@ async function loadAdminData() {
     ORDERS = ordersWithItems.filter(o => o.payment_method !== 'stripe_don');
     DONATIONS = rawDonations.map(d => ({
       id: d.id,
-      short_id: '#VKF-DON-' + (d.id || '').toString().slice(0, 6).toUpperCase(),
+      short_id: '#HET-DON-' + (d.id || '').toString().slice(0, 6).toUpperCase(),
       date: new Date(d.created_at).toLocaleDateString('fr-FR'),
       client: ((d.donor_first_name || '') + ' ' + (d.donor_last_name || '')).trim() || '—',
       email: d.donor_email || '—',
@@ -2391,7 +2391,7 @@ function exportCSV(type) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'vokatra_fifil_' + type + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.download = 'hetsika_fifil_' + type + '_' + new Date().toISOString().slice(0, 10) + '.csv';
   a.click();
   URL.revokeObjectURL(url);
   showToast('CSV téléchargé', 'ok');
