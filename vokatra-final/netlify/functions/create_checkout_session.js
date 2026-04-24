@@ -102,7 +102,7 @@ async function handleOrder({ order_id, church_name }) {
       unit_amount: it.unit_price_cents,
       product_data: {
         name: it.product_name,
-        description: `Projet Vokatra — ${churchLabel}`
+        description: `Hetsika — ${churchLabel}`
       }
     },
     quantity: it.quantity
@@ -179,7 +179,7 @@ async function handleDonation({ donation_id, amount_cents, church_name }) {
           currency: 'eur',
           unit_amount: don.amount_cents || amount_cents,
           product_data: {
-            name: `Don — Projet Vokatra`,
+            name: `Don — Hetsika`,
             description: `${churchLabel} · Merci pour votre soutien 🙏`
           }
         },
